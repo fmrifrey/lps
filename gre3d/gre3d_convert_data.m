@@ -66,33 +66,17 @@ function [kdata,msk,seq_args] = gre3d_convert_data(safile,h5file)
         end
 
         % save kspace data
-        h5create(h5file, '/kdata/real', size(kdata), ...
-            'Datatype', class(real(kdata)));
-        h5write(h5file, '/kdata/real', real(kdata));
-        h5create(h5file, '/kdata/imag', size(kdata), ...
-            'Datatype', class(imag(kdata)));
-        h5write(h5file, '/kdata/imag', imag(kdata));
-        h5create(h5file, '/msk', size(msk), ...
-            'Datatype', class(msk));
-        h5write(h5file, '/msk', msk);
-        h5create(h5file, '/ncoil', size(nc), ...
-            'Datatype', class(nc));
-        h5write(h5file, '/ncoil', nc);
+        lpsutl.saveh5struct(h5file, real(kdata), '/kdata/real');
+        lpsutl.saveh5struct(h5file, imag(kdata), '/kdata/imag');
+
+        % save sampling mask
+        lpsutl.saveh5struct(h5file, msk, '/msk');
+
+        % save number of coils
+        lpsutl.saveh5struct(h5file, nc, '/ncoil');
 
         % save sequence arguments
-        seq_args_fields = fieldnames(seq_args);
-        for i = 1:numel(seq_args_fields)
-            field = seq_args_fields{i};
-            val = seq_args.(field);
-            if islogical(val)
-                val = 1*val;
-            end
-            if ~ischar(val)
-                h5create(h5file, sprintf('/seq_args/%s',field), size(val), ...
-                    'Datatype', class(val));
-                h5write(h5file, sprintf('/seq_args/%s',field), val)
-            end
-        end
+        lpsutl.saveh5struct(h5file, seq_args, '/seq_args');
 
     end
 

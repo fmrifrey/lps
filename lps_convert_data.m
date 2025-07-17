@@ -94,7 +94,7 @@ function [kdata,k_in,k_out,seq_args] = lps_convert_data(safile, h5file)
         lpsutl.saveh5struct(h5file, k_out, '/ktraj/spoke_out');
 
         % save number of coils
-        lpsutl.saveh5struct(h5file, nc, '/nc');
+        lpsutl.saveh5struct(h5file, nc, '/ncoil');
 
         % save sequence arguments
         lpsutl.saveh5struct(h5file, seq_args, '/seq_args');

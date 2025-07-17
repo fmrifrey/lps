@@ -34,7 +34,7 @@ This section contains details on the LpS pulse sequence - i.e. basics of looping
 Clone this repo from the command line using `git clone git@github.com:fmrifrey/lps.git` to install the code into your working directory. Then, from MATLAB, add the base directory to your path using `addpath ./lps`. Additionally, if you would like to run 3D GRE calibration sequences, you can also add the [3D GRE subfolder](gre3d/) using `addpath ./lps/gre3d`. More information can be found in the [3D GRE calibration sequence](#3d-gre-calibration-sequence) section.
 
 #### Install required packages
-Run the script [`update_psd_packages.m`](update_psd_packages.m). This will install or update several required packages into the working directory. One can pick and choose the packages to update by running the script section by section:
+Run the script [`update_packages.m`](update_packages.m). This will install or update several required packages into the working directory. One can pick and choose the packages to update by running the script section by section:
 
 ##### General:
 | Package | Use |
