@@ -11,17 +11,16 @@ This sequence has been extensively tested and used to acquire fMRI data on GE MR
 ### Table of contents
 1. [Overview](#overview)
    - [Table of contents](#table-of-contents)
-2. [Pulse sequence development](#pulse-sequence-development)
+2. [LpS Theory](#lps-theory)
+3. [Pulse sequence development](#pulse-sequence-development)
    - [Getting started](#getting-started)
-   - [LpS pulse sequence theory](#lps-pulse-sequence-theory)
    - [Generating the LpS sequence](#generating-the-lps-sequence)
    - [3D GRE calibration sequence](#3d-gre-calibration-sequence)
-3. [Reconstruction](#reconstruction)
+4. [Reconstruction](#reconstruction)
    - [Getting started](#getting-started)
-   - [LpS reconstruction theory](#lps-reconstruction-theory)
    - [Converting scanner data](#converting-scanner-data)
    - [Reconstruction demo](#reconstruction-demo)
-4. [References](#references)
+5. [References](#references)
 
 ## Pulse sequence development
 
@@ -53,10 +52,6 @@ Run the script [`update_psd_packages.m`](update_psd_packages.m). This will insta
 #### Run the demo script:
 The script [`psd_demo.m`](psd_demo.m) contains demo code to generate a simple LpS dataset along with a 3D GRE calibration sequence on GE scanners.
 
-### LpS pulse sequence theory
-
-TODO
-
 ### Generating the LpS sequence
 
 To generate the LpS sequence files, run the function [`lps_write_seq.m`](lps_write_seq.m). This function can be ran without any input arguments to generate files based on GE scanner defaults.
@@ -66,8 +61,6 @@ To generate the LpS sequence files, run the function [`lps_write_seq.m`](lps_wri
 ### Converting scanner data
 
 ## Reconstruction
-
-### LpS reconstruction theory
 
 ### Getting started
 
