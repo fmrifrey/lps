@@ -21,7 +21,7 @@ function saveh5struct(fname,s,groupName)
             % recursively save subgroups
             saveh5struct(fname,s.(fn{i}),[groupName '/' fn{i}]);
         end
-    else
+    elseif ~isempty(s)
         switch class(s)
             case 'char'
                 s = string(s);
@@ -30,6 +30,9 @@ function saveh5struct(fname,s,groupName)
         end
         h5create(fname, groupName, size(s), 'Datatype', class(s));
         h5write(fname, groupName, s);
+    else % if entry is empty, replace with string
+        h5create(fname, groupName, 1, 'Datatype', 'string');
+        h5write(fname, groupName, "EMPTY");
     end
 
 end

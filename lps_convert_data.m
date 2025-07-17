@@ -22,7 +22,7 @@ function [kdata,k_in,k_out,seq_args] = lps_convert_data(safile, h5file)
     safile = d(1).name;
 
     % load in sequence arguments
-    seq_args = load([sadir,'/seq_args.mat']);
+    seq_args = lpsutl.loadh5struct([sadir,'/seq_args.h5']);
 
     % load archive
     archive = GERecon('Archive.Load', [sadir,'/',safile]);
@@ -46,15 +46,13 @@ function [kdata,k_in,k_out,seq_args] = lps_convert_data(safile, h5file)
 
     % generate kspace trajectory
     [~,~,~,k_in0,k_out0] = lpsutl.gen_lps_waveforms( ...
+        'sys', seq_args.sys, ... % pulseq mr system object
         'fov', seq_args.fov, ... % fov (cm)
         'N', seq_args.N, ... % nominal matrix size
         'nspokes', seq_args.nspokes, ... % number of lps spokes
-        'tseg', seq_args.tseg, ... % number of samples/segment
-        'trf', seq_args.trf, ... % number of samples/rf pulse
-        'fa', seq_args.fa, ... % rf flip angle (deg)
-        'gmax', seq_args.gmax, ... % max gradient amplitude (G/cm)
-        'smax', seq_args.smax, ... % max slew rate (G/cm/s)
-        'dt', seq_args.dt ... % raster time (s))
+        't_seg', seq_args.t_seg, ... % number of samples/segment
+        't_rf', seq_args.t_rf, ... % number of samples/rf pulse
+        'fa', seq_args.fa ... % rf flip angle (deg)
         );
 
     % convert to 3D

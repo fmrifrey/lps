@@ -4,7 +4,9 @@ function gre3d_write_seq(varargin)
 % by David Frey (djfrey@umich.edu)
 %
 % inputs:
+% sys - pulseq mr system structure
 % dir - output directory name
+% dt - ADC sampling rate (s)
 % te - TE (ms)
 % tr - TR (ms)
 % fov - fov (cm)
@@ -20,8 +22,6 @@ function gre3d_write_seq(varargin)
 % delta - CAIPI odd/even shift
 % peorder - phase encode ordering ('snake' or 'spout')
 % dummyshots - number of dummy shots (disdaqs) to play
-% gmax - max gradient amplitude (G/cm)
-% smax - max slew rate (G/cm/s)
 % writepge - option to write pge file
 % pislquant - number of prescan acquisitions
 % plotseq - option to plot the sequence
@@ -29,13 +29,14 @@ function gre3d_write_seq(varargin)
 % output files:
 % gre3d.seq file - seq file for pulseq
 % gre3d.pge file - pge file for pge2 interpreter
-% seq_args.mat - .mat file containing copy of input arguments
+% seq_args.h5 - .h5 file containing copy of input arguments
 %
 
     % set default arguments
+    arg.sys = mr.opts; % pulseq mr system structure
     arg.dir = pwd; % output destination for files
     arg.te = 'min'; % TE (ms)
-    arg.tr = 30e-3; % TR (ms)
+    arg.tr = 30; % TR (ms)
     arg.fov = 16; % fov (cm)
     arg.slabfrac = 0.7; % excitation slab width (fraction of fov)
     arg.fa = 6; % flip angle (deg)
@@ -50,26 +51,12 @@ function gre3d_write_seq(varargin)
     arg.peorder = 'snake'; % pe ordering scheme
     arg.dt = 20e-6; % ADC sampling rate (s)
     arg.dummyshots = 100; % number of dummy shots (disdaqs) to play
-    arg.gmax = 4; % max gradient amplitude (G/cm)
-    arg.smax = 12000; % max slew rate (G/cm/s)
     arg.writepge = true;
     arg.pislquant = 10;
     arg.plotseq = false; % option to plot the sequence
 
     % parse arguments
     arg = vararg_pair(arg,varargin);
-    
-    % set system limits
-    sys = mr.opts('MaxGrad', arg.gmax*10, 'GradUnit', 'mT/m', ...
-        'MaxSlew', arg.smax*1e-2, 'SlewUnit', 'mT/m/ms', ...
-        'rfDeadTime', 100e-6, ...
-        'rfRingdownTime', 60e-6, ...
-        'adcDeadTime', 40e-6, ...
-        'adcRasterTime', 2e-6, ...
-        'rfRasterTime', 2e-6, ...
-        'gradRasterTime', 4e-6, ...
-        'blockDurationRaster', 4e-6, ...
-        'B0', 3.0);
     
     % get phase encode indicies
     if strcmpi(arg.peorder,'snake')
@@ -82,10 +69,10 @@ function gre3d_write_seq(varargin)
     npe = length(pe_idcs);
     
     % Create a new sequence object
-    seq = mr.Sequence(sys);
+    seq = mr.Sequence(arg.sys);
 
     % create fat excitation pulse
-    fatOffres = sys.gamma*sys.B0*arg.fatChemShift*1e-6;  % (Hz)
+    fatOffres = arg.sys.gamma*arg.sys.B0*arg.fatChemShift*1e-6;  % (Hz)
     fatBW = 200; % (Hz)
     fatPW = 12e-3; % (s)
     rf_fat = mr.makeGaussPulse(pi/2, ...
@@ -94,7 +81,7 @@ function gre3d_write_seq(varargin)
         'apodization', 0.42, ...
         'use', 'saturation', ...
         'timeBwProduct', fatBW*fatPW, ...
-        'system', sys);
+        'system', arg.sys);
     
     % create excitation
     [rf, gz] = mr.makeSincPulse(arg.fa*pi/180, ...
@@ -103,47 +90,49 @@ function gre3d_write_seq(varargin)
         'apodization', 0.42, ...
         'use', 'excitation', ...
         'timeBwProduct', 4, ...
-        'system', sys);
-    gzReph = mr.makeTrapezoid('z', 'Area', -gz.area/2, 'system', sys);
+        'system', arg.sys);
+    gzReph = mr.makeTrapezoid('z', ...
+        'Area', -gz.area/2, ...
+        'system', arg.sys);
     
     % create frequency encode gradient and ADC
     gx = mr.makeTrapezoid('x', ...
         'FlatArea', arg.N/(arg.fov*1e-2), ...
         'FlatTime', arg.N*arg.dt, ...
-        'system', sys);
+        'system', arg.sys);
     adc = mr.makeAdc(arg.N, ...
         'Duration', gx.flatTime, ...
         'Delay', gx.riseTime, ...
-        'system', sys);
+        'system', arg.sys);
     
     % create phase encode gradients
     gxPre = mr.makeTrapezoid('x', ...
         'Area', -gx.area/2, ...
-        'system',sys);
+        'system', arg.sys);
     gyPre = mr.makeTrapezoid('y', ...
         'Area', arg.N/(arg.fov*1e-2)/2, ...
         'Duration', mr.calcDuration(gxPre), ...
-        'system', sys);
+        'system', arg.sys);
     gzPre = mr.makeTrapezoid('z', ...
         'Area', arg.N/(arg.fov*1e-2)/2, ...
         'Duration', mr.calcDuration(gxPre), ...
-        'system', sys);
+        'system', arg.sys);
     
     % create spoilers
     gxSpoil = mr.makeTrapezoid('x', ...
         'Area', 4*arg.N/(arg.fov*1e-2), ...
-        'system', sys);
+        'system', arg.sys);
     gySpoil = mr.makeTrapezoid('y', ...
         'Area', 4*arg.N/(arg.fov*1e-2), ...
-        'system', sys);
+        'system', arg.sys);
     gzSpoil = mr.makeTrapezoid('z', ...
         'Area', 4*arg.N/(arg.fov*1e-2), ...
-        'system', sys);
+        'system', arg.sys);
     
     % determine echo time delay
     te_min = mr.calcDuration(rf)/2 + mr.calcDuration(gzReph) + ...
         mr.calcDuration(gzPre) + mr.calcDuration(gx)/2;
-    te_min = sys.gradRasterTime*ceil(te_min/sys.gradRasterTime);
+    te_min = arg.sys.gradRasterTime*ceil(te_min/arg.sys.gradRasterTime);
     if strcmpi(arg.te,'min')
         arg.te = te_min*1e3;
         te_delay = 0;
@@ -158,7 +147,7 @@ function gre3d_write_seq(varargin)
         mr.calcDuration(rf) + mr.calcDuration(gzReph) + ...
         mr.calcDuration(gzPre) + te_delay + mr.calcDuration(gx) + ...
         mr.calcDuration(gzPre);
-    tr_min = sys.gradRasterTime*ceil(tr_min / sys.gradRasterTime);
+    tr_min = arg.sys.gradRasterTime*ceil(tr_min / arg.sys.gradRasterTime);
     if strcmpi(arg.tr,'min')
         arg.tr = 1e3*tr_min;
         tr_delay = 0;
