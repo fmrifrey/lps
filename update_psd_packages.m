@@ -30,4 +30,4 @@ addpath toppe
 fprintf('done.\n')
 
 %% Orchestra (for reading in data from GE scanners)
-addpath ~/code/packages/orchestra-sdk-2.1-1.matlab/ % replace with path to orchestra
+addpath(getenv('ORCHESTRA_PATH_MATLAB')); % ORCHESTRA_PATH_MATLAB environment variable should point to orchestra folder
