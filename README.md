@@ -22,6 +22,8 @@ This sequence has been extensively tested and used to acquire fMRI data on GE MR
    - [Reconstruction demo](#reconstruction-demo)
 5. [References](#references)
 
+## LpS Theory
+
 ## Pulse sequence development
 
 This section contains details on the LpS pulse sequence - i.e. basics of looping star sequence theory, generating the looping star sequence files, and generating the calibration scan.
