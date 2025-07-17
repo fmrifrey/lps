@@ -248,7 +248,10 @@ function gre3d_write_seq(varargin)
         ceq = seq2ceq([arg.dir,'/gre3d.seq']);
         writeceq(ceq, [arg.dir,'/gre3d.pge'], 'pislquant', arg.pislquant);
     end
-    save([arg.dir,'/seq_args.mat'],'-struct','arg');
+    if exist([arg.dir,'/seq_args.h5'], 'file')
+        delete([arg.dir,'/seq_args.h5']);
+    end
+    lpsutl.saveh5struct([arg.dir,'/seq_args.h5'], arg);
     
     % plot the sequence
     if arg.plotseq
