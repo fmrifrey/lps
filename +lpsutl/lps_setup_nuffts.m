@@ -47,7 +47,8 @@ function [Fs_in,Fs_out,b] = lps_setup_nuffts(kdata,k_in,k_out,seq_args,varargin)
     end
 
     % index desired loop indicies
-    nseg = round(seq_args.tseg*1e-6/seq_args.dt);
+    dt = seq_args.sys.gradRasterTime*1e6; % (us)
+    nseg = round(seq_args.t_seg/dt);
     kdata = kdata(nseg*arg.rmspoke1+1:end-nseg*arg.rmspokeN,1:arg.ints2use,1:arg.prjs2use,1:arg.reps2use,:);
     k_in = k_in(nseg*arg.rmspoke1+1:end-nseg*arg.rmspokeN,1:arg.ints2use,1:arg.prjs2use,1:arg.reps2use,:);
     k_out = k_out(nseg*arg.rmspoke1+1:end-nseg*arg.rmspokeN,1:arg.ints2use,1:arg.prjs2use,1:arg.reps2use,:);

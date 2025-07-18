@@ -21,7 +21,7 @@ function [kdata,msk,seq_args] = gre3d_convert_data(safile,h5file)
     safile = d(1).name;
     
     % load in sequence arguments
-    seq_args = load([sadir,'/seq_args.mat']);
+    seq_args = lpsutl.loadh5struct([sadir,'/seq_args.h5']);
     
     % load archive
     archive = GERecon('Archive.Load', [sadir,'/',safile]);

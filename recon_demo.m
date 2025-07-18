@@ -1,11 +1,11 @@
 %% set arguments
 basedir = './'; % directory containing data
-fname_kdata = 'lps_data.h5'; % name of input .h5 file (in basedir)
-fname_smaps = 'smaps.h5'; % name of input smaps .h5 file (in basedir)
+fname_kdata = 'lpsdata.h5'; % name of input .h5 file (in basedir)
+fname_smaps = '../smaps.h5'; % name of input smaps .h5 file (in basedir)
 fname_out = 'lps_recon.h5'; % name of output recon .h5 file (in basedir)
 
 % set recon parameters
-rec_args.ncoil_comp = 4; % number of coils to compress to
+rec_args.ncoil_comp = 8; % number of coils to compress to
 rec_args.cutoff = 0.85; % kspace cutoff for echo-in/out filtering
 rec_args.rolloff = 0.1; % kspace rolloff for echo-in/out filtering
 rec_args.beta = 2^18; % regularization parameter for quadratic finite differencing penalty
@@ -16,7 +16,7 @@ rec_args.prjs2use = []; % number of projections to use (leave empty for all)
 rec_args.reps2use = []; % number of repetitions to use (leave empty for all)
 rec_args.volwidth = 32; % number of projections per volume (leave empty for all)
 rec_args.initdcf = 0; % option to initialize with density compensated recon
-rec_args.usepar = 0; % option to parallelize block matrix computations
+rec_args.usepar = 1; % option to parallelize block matrix computations
 
 %% load LpS data from h5 file
 str = lpsutl.loadh5struct(fullfile(basedir,fname_kdata));
