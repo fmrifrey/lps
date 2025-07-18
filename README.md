@@ -2,31 +2,33 @@
 
 by David Frey (djfrey@umich.edu)
 
-## Overview
-This repository contains vendor-agnostic pulse sequence programming and reconstruction for Looping Star MRI.
-Looping Star (LpS) is a silent pulse sequence, based on gradient recalled ZTE, which multiplexes the readout of multiple echoes in order to achieve efficient k-space sampling while maintaining low gradient amplitude and slew rate.
+This repository contains vendor-agnostic pulse sequence programming and reconstruction for Looping Star MRI. This sequence has been extensively tested and used to acquire fMRI data on GE MR750 scanners. However, the sequence is still being developed for use on Siemens scanners.
 
-This sequence has been extensively tested and used to acquire fMRI data on GE MR750 scanners. However, the sequence is still being developed for use on Siemens scanners.
-
-### Table of contents
-1. [Overview](#overview)
-   - [Table of contents](#table-of-contents)
+## Table of contents
+1. [Table of contents](#table-of-contents)
 2. [LpS Theory](#lps-theory)
-3. [Pulse sequence development](#pulse-sequence-development)
+   - [Pulse sequence basics](#pulse-sequence-basics)
+   - [Reconstruction model](#reconstruction-model)
+4. [Pulse sequence development](#pulse-sequence-development)
    - [Getting started](#getting-started)
    - [Generating the LpS sequence](#generating-the-lps-sequence)
    - [3D GRE calibration sequence](#3d-gre-calibration-sequence)
-4. [Reconstruction](#reconstruction)
+5. [Reconstruction](#reconstruction)
    - [Getting started](#getting-started)
    - [Converting scanner data](#converting-scanner-data)
    - [Reconstruction demo](#reconstruction-demo)
-5. [References](#references)
+6. [References](#references)
 
 ## LpS Theory
 
-## Pulse sequence development
+### Pulse sequence basics
+Looping Star (LpS) is a silent MRI pulse sequence based on gradient recalled zero-echo-time (ZTE) radial imaging, which multiplexes the readout of multiple echoes in order to achieve efficient k-space sampling while maintaining low gradient amplitude and slew rate.
 
-This section contains details on the LpS pulse sequence - i.e. basics of looping star sequence theory, generating the looping star sequence files, and generating the calibration scan.
+A single block (TR) of a basic LpS pulse sequence is shown in the figure below. 
+
+### Reconstruction model
+
+## Pulse sequence development
 
 ### Getting started
 
