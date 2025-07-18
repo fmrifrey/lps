@@ -44,13 +44,13 @@ function [g,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
         error('trf must be divisible by rf raster time');
     end
 
-    % calculate loop velocity
-    om = 2*pi / (arg.nspokes * arg.t_seg*1e-6); % (Hz)
+    % calculate loop frequency
+    f_loop = 1 / (arg.nspokes * arg.t_seg*1e-6); % (Hz)
 
     % calculate gradient amplitude & slew rate
     g_amp = pi*arg.N / (arg.t_seg*1e-6) / ...
         (arg.nspokes * arg.fov*1e-2 * 2 * sin(pi/arg.nspokes)); % (Hz/m)
-    s_amp = om * g_amp; % (Hz/m/s)
+    s_amp = 2*pi * f_loop * g_amp; % (Hz/m/s)
     assert(g_amp <= arg.sys.maxGrad, ...
         'gradient amp exceeds limit with given parameters')
     assert(s_amp <= arg.sys.maxSlew, ...
@@ -59,8 +59,8 @@ function [g,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
     % construct looping star gradients
     nseg_g = round(arg.t_seg/dt_g);
     n_g = 0:2*arg.nspokes*nseg_g-1;
-    gx = g_amp * cos(om * n_g*dt_g*1e-6); % (Hz/m)
-    gy = g_amp * sin(om * n_g*dt_g*1e-6); % (Hz/m)
+    gx = g_amp * cos(2*pi * f_loop * n_g*dt_g*1e-6); % (Hz/m)
+    gy = g_amp * sin(2*pi * f_loop * n_g*dt_g*1e-6); % (Hz/m)
 
     % calculate rf amplitude
     rf_amp = arg.fa / (360 * arg.t_rf*1e-6); % (Hz)
@@ -103,7 +103,7 @@ function [g,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
         plot(1e-3*dt_g*(0:size(g,1)-1),g);
         ylabel('gradient amp (Hz/m)')
         yyaxis right
-        plot(t_ramp+1e-3*dt_rf*(0:length(rf)-1),rf)
+        plot(t_ramp*1e3+1e-3*dt_rf*(0:length(rf)-1),rf)
         ylabel('rf amp (Hz)');
         xlabel('time (ms)')
         title('looping star waveforms');

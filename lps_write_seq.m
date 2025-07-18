@@ -61,7 +61,6 @@ function lps_write_seq(varargin)
         't_rf', arg.t_rf, ... % rf pulse width
         'fa', arg.fa ... % rf flip angle (deg)
         );
-    g_wav = g_wav*1e-3; % Hz/m -> kHz/m
     G0 = padarray(g_wav.',[1,0],0,'post');
 
     % create rf (only take 1st half to play during block 1)
