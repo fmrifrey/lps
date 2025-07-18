@@ -1,4 +1,7 @@
-%% Generate 3D GRE sequence
+%% create pulseq system structure
+sys = lpsutl.get_sys_defaults('ge');
+
+%% generate 3D GRE sequence
 gre3d_write_seq('N', 128, ...
     'fov', 20, ...
     'fa', 6, ...
@@ -8,17 +11,17 @@ gre3d_write_seq('N', 128, ...
     'Ry', 2, ...
     'Rz', 2);
 
-%% Convert the 3D GRE scanarchive data to custom h5 file format
+%% convert the 3D GRE scanarchive data to custom h5 file format
 % Assumed that the scanarchive file is transferred into the gre directory
 gre3d_convert_data('gre3d_scanarc.h5', './gre3d_data.h5');
 
-%% Generate LpS sequence
+%% generate LpS sequence
 lps_write_seq('N', 100, ...
     'fov', 20, ...
     'fa', 6, ...
     'tr', 62.5, ...
     'nprj', 320);
 
-%% Convert the LpS scanarchive data to custom h5 file format
+%% convert the LpS scanarchive data to custom h5 file format
 % Assumed that the scanarchive file is transferred into the working directory
 lps_convert_data('./lps_scanarc.h5', './lps_data.h5');
