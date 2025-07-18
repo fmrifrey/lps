@@ -27,7 +27,7 @@ function lps_write_seq(varargin)
 %
 
     % set default arguments
-    arg.sys = mr.opts; % pulseq mr system structure
+    arg.sys = lpsutl.get_sys_defaults('ge'); % pulseq mr system structure
     arg.dir = pwd; % output directory name
     arg.tr = 100; % repetition time (ms)
     arg.fov = 20; % fov (cm)

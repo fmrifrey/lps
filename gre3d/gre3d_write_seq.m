@@ -33,7 +33,7 @@ function gre3d_write_seq(varargin)
 %
 
     % set default arguments
-    arg.sys = mr.opts; % pulseq mr system structure
+    arg.sys = lpsutl.get_sys_defaults('ge'); % pulseq mr system structure
     arg.dir = pwd; % output destination for files
     arg.te = 'min'; % TE (ms)
     arg.tr = 30; % TR (ms)
