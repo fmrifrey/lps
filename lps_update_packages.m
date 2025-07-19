@@ -12,8 +12,9 @@ fprintf('done.\n')
 fprintf('updating MIRT... ')
 system('[ -d "./MIRT" ] && rm -rf ./MIRT');
 system('git clone git@github.com:JeffFessler/MIRT.git 2> /dev/null');
+run ./MIRT/setup.m
+run ./MIRT/ir_mex_build.m
 fprintf('done.\n')
-run MIRT/setup.m
 
 %% PulCeq (for GE pulse sequence development)
 fprintf('updating PulCeq... ')
@@ -30,4 +31,6 @@ addpath toppe
 fprintf('done.\n')
 
 %% Orchestra (for reading in data from GE scanners)
+fprintf('adding orchestra to path... ')
 addpath(getenv('ORCHESTRA_PATH_MATLAB')); % ORCHESTRA_PATH_MATLAB environment variable should point to orchestra folder
+fprintf('done.\n')

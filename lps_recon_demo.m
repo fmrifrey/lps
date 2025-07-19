@@ -1,8 +1,9 @@
 %% set arguments
 basedir = './'; % directory containing data
-fname_kdata = 'lpsdata.h5'; % name of input .h5 file (in basedir)
+fname_kdata = 'raw_data.h5'; % name of input .h5 file (in basedir)
 fname_smaps = '../smaps.h5'; % name of input smaps .h5 file (in basedir)
-fname_out = 'lps_recon.h5'; % name of output recon .h5 file (in basedir)
+fname_out = sprintf('recon_%s.h5',...
+    string(datetime('now','Format','yyyyMMddHHmm'))); % name of output recon .h5 file (in basedir)
 
 % set recon parameters
 rec_args.ncoil_comp = 8; % number of coils to compress to
@@ -19,6 +20,7 @@ rec_args.initdcf = 0; % option to initialize with density compensated recon
 rec_args.usepar = 1; % option to parallelize block matrix computations
 
 %% load LpS data from h5 file
+fprintf('loading raw data...\n');
 str = lpsutl.loadh5struct(fullfile(basedir,fname_kdata));
 kdata = str.kdata.real + 1i*str.kdata.imag;
 k_in = str.ktraj.spoke_in;
@@ -29,6 +31,7 @@ if isempty(rec_args.M)
 end
 
 %% set up Fourier encoding operators and data
+fprintf('setting up nufft operators...\n');
 if isempty(rec_args.ints2use)
     rec_args.ints2use = seq_args.nint; % use all unique in-plane rotations
 end
@@ -63,16 +66,19 @@ else % no parallelization
 end
 
 %% create the kspace echo-in/out Fermi filters
+fprintf('setting up echo-in/out filters...\n');
 [Hs_in,Hs_out] = lpsutl.lps_setup_filters(Fs_in,Fs_out, ...
     seq_args.N/rec_args.M*rec_args.cutoff, ... % kspace filter cutoff
     seq_args.N/rec_args.M*rec_args.rolloff ... % kspace filter rolloff
     );
 
 %% load in the sensitivity maps and coil compress
+fprintf('loading sensitivity maps...\n');
 str = lpsutl.loadh5struct(fullfile(basedir,fname_smaps));
 smaps = str.real + 1i*str.imag;
 
 % compress data and get compression matrix
+fprintf('coil compressing data...\n');
 [tmp,~,Vr] = ir_mri_coil_compress(permute(b,[1,3,2]),'ncoil',rec_args.ncoil_comp);
 b = permute(tmp,[1,3,2]);
 
@@ -83,6 +89,7 @@ smaps = lpsutl.resample3d(smaps,rec_args.M*ones(1,3));
 smaps = reshape(reshape(smaps,[],size(smaps,4))*Vr,[rec_args.M*ones(1,3),rec_args.ncoil_comp]);
 
 %% create the sensitivity encoding operator
+fprintf('constructing SENSE operator...\n');
 Ss = cell(rec_args.ncoil_comp,1);
 for i = 1:rec_args.ncoil_comp
     smapi = smaps(:,:,:,i);
@@ -91,6 +98,7 @@ end
 S = lpsutl.block_col(Ss,par_coils);
 
 %% create the system matrix
+fprintf('constructing full system matrix...\n');
 As_in = cell(nvol,1);
 As_out = cell(nvol,1);
 for i = 1:nvol
@@ -108,6 +116,7 @@ A = A_in + A_out; % sum of echo-in/out system matrices
 
 %% initialize the solution
 if rec_args.initdcf % initialize with dcf-nuFFT solution
+    fprintf('computing dcf-nufft initialization...\n');
     WAs_in = cell(nvol,1);
     WAs_out = cell(nvol,1);
     if nvol == 1 % single volume
@@ -142,10 +151,12 @@ if rec_args.initdcf % initialize with dcf-nuFFT solution
     x0 = WA' * b;
     x0 = ir_wls_init_scale(A,b,x0);
 else % initialize with zeros
+    fprintf('initializing solution with zeros...\n');
     x0 = zeros(A.idim);
 end
 
 %% make the regularizer (spatial roughness penalty)
+fprintf('creating regularization function...\n');
 qp = Reg1(true(rec_args.M*ones(1,3)),'beta',rec_args.beta);
 % % code to determine a good regularization parameter:
 % qpwls_psf(Av1, qp.C, beta, true(seq_args.N*ones(1,3)),1, ...
@@ -156,6 +167,7 @@ if nvol > 1
 end
 
 %% solve with CG
+fprintf('solving with CG...\n');
 % create system operator compatible with qpwls_pcg1 function
 A_pcg = fatrix2( ...
     'idim', [prod(A.idim),1], ...
@@ -167,6 +179,7 @@ x_star = qpwls_pcg1(x0(:), A_pcg, 1, b(:), C, 'niter', rec_args.niter);
 img_lps = reshape(x_star,A.idim);
 
 %% save to h5 recon file
+fprintf('saving to h5 file...\n');
 fname = fullfile(basedir,fname_out);
 if exist(fname, 'file')
     delete(fname);
@@ -175,3 +188,4 @@ lpsutl.saveh5struct(fname, real(img_lps), '/sol/real');
 lpsutl.saveh5struct(fname, imag(img_lps), '/sol/imag');
 lpsutl.saveh5struct(fname, seq_args, '/seq_args');
 lpsutl.saveh5struct(fname, rec_args, '/rec_args');
+fprintf('reconstruction completed --> saved to %s\n',fname_out);

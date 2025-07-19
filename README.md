@@ -34,7 +34,7 @@ This section contains details on the LpS pulse sequence - i.e. basics of looping
 Clone this repo from the command line using `git clone git@github.com:fmrifrey/lps.git` to install the code into your working directory. Then, from MATLAB, add the base directory to your path using `addpath ./lps`. Additionally, if you would like to run 3D GRE calibration sequences, you can also add the [3D GRE subfolder](gre3d/) using `addpath ./lps/gre3d`. More information can be found in the [3D GRE calibration sequence](#3d-gre-calibration-sequence) section.
 
 #### Install required packages
-Run the script [`update_packages.m`](update_packages.m). This will install or update several required packages into the working directory. One can pick and choose the packages to update by running the script section by section:
+Run the script [`lps_update_packages.m`](lps_update_packages.m). This will install or update several required packages into the working directory. One can pick and choose the packages to update by running the script section by section:
 
 ##### General:
 | Package | Use |
@@ -52,7 +52,7 @@ Run the script [`update_packages.m`](update_packages.m). This will install or up
 \*note: <i>Orchestra requires the GE SDK license and can be installed from [WeConnect](https://weconnect.gehealthcare.com/s/feed/0D53a00008pQ1Q8CAK). Once Orchestra has been installed locally, you can set its path as an environment variable called `ORCHESTRA_PATH_MATLAB` (i.e. on Linux, add the line `export ORCHESTRA_PATH_MATLAB="/path/to/orchestra"` to your `.bashrc` file).</i>
 
 #### Run the demo script:
-The script [`psd_demo.m`](psd_demo.m) contains demo code to generate a simple LpS dataset along with a 3D GRE calibration sequence on GE scanners.
+The script [`lps_psd_demo.m`](lps_psd_demo.m) contains demo code to generate a simple LpS dataset along with a 3D GRE calibration sequence on GE scanners.
 
 ### Generating the LpS sequence
 
