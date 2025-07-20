@@ -1,3 +1,5 @@
+<img width="400" height="200" alt="lps_horizontal" src="https://github.com/user-attachments/assets/6893530c-6f89-4567-ae8b-7f54092dfa1b" />
+
 # Harmonized Looping Star MRI (lps)
 
 by David Frey (djfrey@umich.edu)
@@ -24,9 +26,51 @@ This repository contains vendor-agnostic pulse sequence programming and reconstr
 ### Pulse sequence basics
 Looping Star (LpS) is a silent MRI pulse sequence based on gradient recalled zero-echo-time (ZTE) radial imaging, which multiplexes the readout of multiple echoes in order to achieve efficient k-space sampling while maintaining low gradient amplitude and slew rate.
 
-A single block (TR) of a basic LpS pulse sequence is shown in the figure below. 
+A single block (TR) of a basic LpS pulse sequence is shown in the figure below:
+
 
 ### Reconstruction model
+
+For a single volume, the acquisition of LpS data can be modeled as:
+
+$$ b = (A_\text{in} + A_\text{out}) x + \epsilon $$
+
+where:
+- $$x \in \mathbb{C}^N$$: discrete volumetric image
+- $$N \in \mathbb{Z}$$: number of voxels in single volumetric image
+- $$b \in \mathbb{C}^{MQ}$$: acquired multi-channel k-space data containing overlapping echoes
+- $$\epsilon \in \mathbb{C}^{MQ}$$: acquisition noise
+- $$M \in \mathbb{Z}$$: number of acquired k-space samples per TR
+- $$Q \in \mathbb{Z}$$: number of coil channels for parallel imaging
+- $$A_\text{in},A_\text{out} \in \mathbb{C}^{MQ \times N}$$: multi-channel k-space encoding matrices for the in-spoke and out-spoke data, respectively, i.e.:
+
+$$ A_\text{in/out} = (I_Q \otimes F_\text{in/out}) S $$
+
+- $$I_Q \in \mathbb{R}^{Q \times Q}$$: rank $$Q$$ identity matrix
+- $$F_\text{in/out} \in \mathbb{C}^{M \times N}$$: Fourier encoding matrix for the in- or out-spoke (typically substituted for an nuFFT operator), i.e.:
+
+$$ F_\text{in/out} = \exp{ (-j 2 \pi k_\text{in/out} r^T ) } $$
+
+- $$k_\text{in/out} \in \mathbb{R}^{M \times 3}$$: non-cartesian 3D k-space sample coordinates for the in- or out-spoke
+- $$r \in \mathbb{R}^{N \times 3}$$: cartesian image space sampling coordinates
+- $$S \in \mathbb{C}^{NQ \times N}$$: sensitivity encoding operator, i.e.:
+
+$$
+S = \begin{bmatrix}
+   \text{diag}(s_1) \\
+   \text{diag}(s_2) \\
+   \vdots \\
+   \text{diag}(s_Q)
+   \end{bmatrix}
+$$
+
+- $$s_q \in \mathbb{C}^N$$: volumetric coil sensitivity map of the $$q$$ th channel
+
+Additionally, we often account for the ill-conditioning at the edges of k-space by applying a Fermi-shaped filter to the k-space data, i.e.:
+
+$$ A_\text{in/out} = (I_Q \otimes (H_\text{in/out} F_\text{in/out})) S $$
+
+- $$H_\text{in/out} \in \mathbb{C}^{M \times M}$$: Fermi-shaped k-space filter for the in- or out-spoke, i.e.:
 
 ## Pulse sequence development
 
