@@ -185,16 +185,18 @@ where:
 - $$\mathbf{A}^+ \in \mathbb{C}^{NV \times MQPV}$$: right Moore-Penrose psuedoinverse of $$\mathbf{A}$$
 - $$\mathbf{z} \in \mathcal{N}(\mathbf{A})$$: any vector in the $$(N - MQP)V$$-dimensional nullspace of $$\mathbf{A}$$
 
-In other words, since k-space is undersampled, there are infinitely many ways to fill in the missing frequency components. The nullspace of $$\mathbf{A}$$ represents the missing frequency components.
+In other words, since k-space is undersampled, there are infinitely many ways to fill in the missing frequency components. The nullspace of $$\mathbf{A}$$ represents the missing frequency components. $$\mathbf{A}^+ \mathbf{b}$$ is called the minimum-norm solution, which zero-fills the missing frequency components. This is the solution that contains aliasing which gradient-based methods will converge to. However, with the right choice of $$z$$, the true, un-aliased image is also an equally likely solution in terms of $$\ell2$$ error.
 
-Similarly, we can still acquire enough samples such that $$MPQ > N$$ without fully representing all the needed frequency components. This is especially the case in LpS due to the echo-in/out overlap at the edges of k-space, which are already most likely undersampled. In this case, the problem is fully or overdetermined, but ill-conditioned. This problem has an exact solution, $$\mathbf{x}_* = \mathbf{A}^+ \mathbf{b}$$, but is most likely to be dominated by the overfitting of noise. Other solutions that are equally as likely (such as the dealiased solution which correctly fills in the missing frequency components) only differ in data consistency due to subtle differences in the noise profile. To better condition our problem, we can promote or penalize certain solutions based on prior assumptions about the true image by adding a regularization term:
+Similarly, we can still acquire enough samples such that $$MPQ > N$$ without fully representing all the needed frequency components. This is especially the case in LpS when the edges of 3D k-space are undersampled while the origin is oversampled. In this case, the problem is fully or overdetermined, but ill-conditioned. The problem has an exact solution, $$\mathbf{x}_* = \mathbf{A}^+ \mathbf{b}$$, but is most likely to be dominated by the overfitting of noise. Other solutions that are equally as likely (such as the true image) only differ in data consistency due to subtle differences in the noise profile. To better condition our problem, we can promote or penalize certain solutions based on prior assumptions about the true image by adding a regularization term:
 
 $$ \mathbf{x}_* = \underset{\mathbf{x}}{\text{argmin}} \text{ ||}\mathbf{A} \mathbf{x} - \mathbf{b}\text{||}_2^2 + g(\mathbf{x})$$
 
 where:
 - $$g(x): \mathbb{C}^{NV} \to \mathbb{R}$$: regularization function
 
-The problem can then be solved using gradient based methods (i.e. CG, FISTA, PGM), which depend on the choice of regularization function.
+For example, if $$g(x) = \text{||}(F \otimes I_N)x\text{||}_1$$ where $$F \in \mathbb{C}^{V \times V}$$ is a discrete temporal Fourier Transform operator, solutions which have a sparse temporal frequency representation will be promoted.
+
+The problem can then be solved using gradient based methods (i.e. CG, FISTA, PGM), which depend on the choice of regularization function, its convexity/linearity and smoothness.
 
 ## Pulse sequence development
 
