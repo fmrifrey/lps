@@ -177,7 +177,7 @@ We can solve for the best image in terms of $\ell2$ norm error by solving the fo
 
 $$ \mathbf{x}_* = \underset{\mathbf{x}}{\text{argmin}} \text{ ||}\mathbf{A} \mathbf{x} - \mathbf{b}\text{||}_2^2 $$
 
-If the total number of k-space samples is less than the number of reconstructed voxels (i.e. $$MPQ < N^3$$), the problem above is underdetermined, and has infinitely many solutions of the form:
+If the total number of k-space samples is less than the number of reconstructed voxels (i.e. $$MPQ \lt N^3$$), the problem above is underdetermined, and has infinitely many solutions of the form:
 
 $$ \mathbf{x}_* = \mathbf{A}^+ \mathbf{b} + \mathbf{z}$$
 
@@ -187,7 +187,7 @@ where:
 
 In other words, since k-space is undersampled, there are infinitely many ways to fill in the missing frequency components. The nullspace of $$\mathbf{A}$$ represents the missing frequency components. $$\mathbf{A}^+ \mathbf{b}$$ is called the minimum-norm solution, which zero-fills the missing frequency components. This is the solution that contains aliasing which gradient-based methods will converge to. However, with the right choice of $$z$$, the true, un-aliased image is also an equally likely solution in terms of $$\ell2$$ error.
 
-Similarly, we can still acquire enough samples such that $$MPQ > N^3$$ without fully representing all the needed frequency components. This is especially the case in LpS when the edges of 3D k-space are undersampled while the origin is oversampled. In this case, the problem is fully or overdetermined, but ill-conditioned. The problem has an exact solution, $$\mathbf{x}_* = \mathbf{A}^+ \mathbf{b}$$, but is most likely to be dominated by the overfitting of noise. Other solutions that are equally as likely (such as the true image) only differ in data consistency due to subtle differences in the noise profile. To better condition our problem, we can promote or penalize certain solutions based on prior assumptions about the true image by adding a regularization term:
+Similarly, we can still acquire enough samples such that $$MPQ \geq N^3$$ without fully representing all the needed frequency components. This is especially the case in LpS when the edges of 3D k-space are undersampled while the origin is oversampled. In this case, the problem is fully or overdetermined, but ill-conditioned. The problem has an exact solution, $$\mathbf{x}_* = \mathbf{A}^+ \mathbf{b}$$, but is most likely to be dominated by the overfitting of noise. Other solutions that are equally as likely (such as the true image) only differ in data consistency due to subtle differences in the noise profile. To better condition our problem, we can promote or penalize certain solutions based on prior assumptions about the true image by adding a regularization term:
 
 $$ \mathbf{x}_* = \underset{\mathbf{x}}{\text{argmin}} \text{ ||}\mathbf{A} \mathbf{x} - \mathbf{b}\text{||}_2^2 + g(\mathbf{x})$$
 
