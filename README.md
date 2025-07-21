@@ -28,10 +28,18 @@ This repository contains vendor-agnostic pulse sequence programming and reconstr
 ## LpS Theory
 
 ### Pulse sequence basics
+
 Looping Star (LpS) is a silent MRI pulse sequence based on gradient recalled zero-echo-time (ZTE) radial imaging, which multiplexes the readout of multiple echoes in order to achieve efficient k-space sampling while maintaining low gradient amplitude and slew rate.
 
 A single block (TR) of a basic LpS pulse sequence is shown in the figure below:
+<img width="1000" height="500" alt="lps_tr" src="https://github.com/user-attachments/assets/20f5e807-1702-4753-8586-c24addb6e136" />
 
+Each RF pulse in the first half of the sequence excites a population of spins, which are then dephased to the outer edge of k-space, $$k_\text{max}$$, before another population is excited by the next RF pulse. Each RF pulse excites a single spoke in k-space.
+
+
+#### Overlapping echoes
+
+When $$\frac{N}{\text{FOV}} > k_{\text{max}}$$, some of signal encoded from the echo moving into the sampling region (in-spoke) will overlap with the signal encoded by the out-spoke. If not accounted for, this will result in high signal from the center of k-space appearing on the outside of k-space. It is also known that this signal overlap results in ill-conditioning of the encoding matrix. However, if correctly accounted for, this can allow one to improve the image resolution without needing to acquire more data.
 
 ### Reconstruction model
 
@@ -89,11 +97,11 @@ $$A_{\text{in/out},p} = (I_Q \otimes (H_\text{in/out} F_{\text{in/out},p}))\ S$$
 where:
 - $$H_\text{in/out} \in \mathbb{C}^{M \times M}$$: Fermi-shaped k-space filter for the in- or out-spoke, i.e.:
 
-$$H_\text{in/out} = \text{diag}\left( \frac{1}{1 + \exp{\left(2 \pi \frac{|k_{\text{in/out},0}| - \alpha_\text{cutoff}k_\text{max}}{\alpha_\text{rolloff}k_\text{max}} \right)}} \right)$$
+$$H_\text{in/out} = \text{diag}\left( \frac{1}{1 + \exp{\left(2 \pi \frac{|k_{\text{in/out},0}| - \mu_\text{cutoff}k_\text{max}}{\sigma_\text{rolloff}k_\text{max}} \right)}} \right)$$
 
 - $$|k_{\text{in/out},0}| \in \mathbb{R}^M$$: non-cartesian 3D k-space sample coordinate radii for the in- or out-spoke of the $$0^\text{th}$$ k-space projection
 - $$k_\text{max} \in \mathbb{R}$$: maximum k-space sample coordinate radii
-- $$\alpha_\text{cutoff},\alpha_\text{rolloff} \in (0,1)$$: Fermi filter cutoff and rolloff parameters, respectively
+- $$\mu_\text{cutoff},\sigma_\text{rolloff} \in (0,1)$$: Fermi filter cutoff and rolloff parameters, respectively
 
 #### Volume-wise acquisition model
 
