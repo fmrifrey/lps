@@ -6,16 +6,17 @@ fname_out = sprintf('recon_%s.h5',...
     string(datetime('now','Format','yyyyMMddHHmm'))); % name of output recon .h5 file (in basedir)
 
 % set recon parameters
-rec_args.ncoil_comp = 8; % number of coils to compress to
+rec_args.ncoil_comp = 4; % number of coils to compress to
 rec_args.cutoff = 0.85; % kspace cutoff for echo-in/out filtering
 rec_args.rolloff = 0.1; % kspace rolloff for echo-in/out filtering
-rec_args.beta = 2^18; % regularization parameter for quadratic finite differencing penalty
+rec_args.beta = 2^18; % spatial roughness penalty
+%rec_args.beta_t = 2^12; % temporal roughness penalty
 rec_args.niter = 30; % number of iterations for CG
 rec_args.M = []; % reconstruction matrix size (leave empty for cutoff * N)
 rec_args.ints2use = []; % number of interleaves to use (leave empty for all)
 rec_args.prjs2use = []; % number of projections to use (leave empty for all)
 rec_args.reps2use = []; % number of repetitions to use (leave empty for all)
-rec_args.volwidth = 32; % number of projections per volume (leave empty for all)
+rec_args.volwidth = []; % number of projections per volume (leave empty for all)
 rec_args.initdcf = 0; % option to initialize with density compensated recon
 rec_args.usepar = 1; % option to parallelize block matrix computations
 
@@ -95,20 +96,20 @@ for i = 1:rec_args.ncoil_comp
     smapi = smaps(:,:,:,i);
     Ss{i} = Gdiag(smapi(Fs_in{1}.imask(:)),'mask',Fs_in{1}.imask);
 end
-S = lpsutl.block_col(Ss,par_coils);
+S = lpsutl.block_col(Ss,0);
 
 %% create the system matrix
 fprintf('constructing full system matrix...\n');
 As_in = cell(nvol,1);
 As_out = cell(nvol,1);
-for i = 1:nvol
-    As_in{i} = kronI(rec_args.ncoil_comp, Hs_in{i} * Fs_in{i}) * S;
-    As_out{i} = kronI(rec_args.ncoil_comp, Hs_out{i} * Fs_out{i}) * S;
+for i = 1:nvol % repeat forward encoding for each sense map
+    As_in{i} = lpsutl.kronI(rec_args.ncoil_comp, Hs_in{1}*Fs_in{i}, par_coils) * S;
+    As_out{i} = lpsutl.kronI(rec_args.ncoil_comp, Hs_out{1}*Fs_out{i}, par_coils) * S;
 end
 if nvol == 1 % single volume
     A_in = As_in{1};
     A_out = As_out{1};
-else
+else % each volume is a block in a block diagonal matrix
     A_in = lpsutl.block_diag(As_in,par_vols);
     A_out = lpsutl.block_diag(As_out,par_vols);
 end
@@ -117,39 +118,24 @@ A = A_in + A_out; % sum of echo-in/out system matrices
 %% initialize the solution
 if rec_args.initdcf % initialize with dcf-nuFFT solution
     fprintf('computing dcf-nufft initialization...\n');
-    WAs_in = cell(nvol,1);
-    WAs_out = cell(nvol,1);
-    if nvol == 1 % single volume
-        W_in = lpsutl.dcf_pipe(Fs_in{1});
-        W_out = lpsutl.dcf_pipe(Fs_out{1});
-        WAs_in{1} = kronI(rec_args.ncoil_comp, W_in * Hs_in{1} * Fs_in{1}) * S;
-        WAs_out{1} = kronI(rec_args.ncoil_comp, W_out * Hs_out{1} * Fs_out{1}) * S;
-        WA_in = WAs_in{1};
-        WA_out = WAs_out{1};
-    elseif par_vols
-        % compute dcfs in parallel
-        parfor i = 1:nvol
-            Wi_in = lpsutl.dcf_pipe(Fs_in{i});
-            Wi_out = lpsutl.dcf_pipe(Fs_out{i});
-            WAs_in{i} = kronI(rec_args.ncoil_comp, Wi_in * Hs_in{i} * Fs_in{i}) * S;
-            WAs_out{i} = kronI(rec_args.ncoil_comp, Wi_out * Hs_out{i} * Fs_out{i}) * S;
-        end
-        % construct new weighted system matrix
-        WA_in = lpsutl.block_diag(WAs_in{:},1);
-        WA_out = lpsutl.block_diag(WAs_out{:},1);
-    else % same but not in parallel
-        for i = 1:nvol
-            Wi_in = lpsutl.dcf_pipe(Fs_in{i});
-            Wi_out = lpsutl.dcf_pipe(Fs_out{i});
-            WAs_in{i} = kronI(rec_args.ncoil_comp, Wi_in * Hs_in{i} * Fs_in{i}) * S;
-            WAs_out{i} = kronI(rec_args.ncoil_comp, Wi_out * Hs_out{i} * Fs_out{i}) * S;
-        end
-        WA_in = lpsutl.block_diag(WAs_in{:},0);
-        WA_out = lpsutl.block_diag(WAs_out{:},0);
+    Ws_in = lpsutl.dcf_pipe(Fs_in,3,par_vols);
+    Ws_out = lpsutl.dcf_pipe(Fs_out,3,par_vols);
+    Whats_in = cell(nvol,1);
+    Whats_out = cell(nvol,1);
+    for i = 1:nvol % repeat forward encoding for each sense map
+        Whats_in{i} = lpsutl.kronI(rec_args.ncoil_comp, Ws_in{i}, 0);
+        Whats_out{i} = lpsutl.kronI(rec_args.ncoil_comp, Ws_out{i}, 0);
     end
-    WA = WA_in + WA_out; % sum of echo-in/out system matrices
+    if nvol == 1 % single volume
+        W_in = Whats_in{1};
+        W_out = Whats_out{1};
+    else % each volume is a block in a block diagonal matrix
+        W_in = lpsutl.block_diag(Whats_in,0);
+        W_out = lpsutl.block_diag(Whats_out,0);
+    end
+    WA = W_in*A_in + W_out*A_out;
     x0 = WA' * b;
-    x0 = ir_wls_init_scale(A,b,x0);
+    x0 = ir_wls_init_scale(WA,b,x0);
 else % initialize with zeros
     fprintf('initializing solution with zeros...\n');
     x0 = zeros(A.idim);
@@ -157,13 +143,15 @@ end
 
 %% make the regularizer (spatial roughness penalty)
 fprintf('creating regularization function...\n');
-qp = Reg1(true(rec_args.M*ones(1,3)),'beta',rec_args.beta);
-% % code to determine a good regularization parameter:
-% qpwls_psf(Av1, qp.C, beta, true(seq_args.N*ones(1,3)),1, ...
-%     'loop', 1, 'dx', seq_args.fov/seq_args.N, 'dz', seq_args.fov/seq_args.N);
-C = qp.C;
-if nvol > 1
-    C = kronI(nvol,C);
+if nvol == 1 % spatial regularizer only
+    C = sqrt(rec_args.beta) * lpsutl.finite_diff(A.idim,1:3);
+else % spatial + temporal
+    Cblocks = cell(4,1);
+    for i = 1:3 % spatial
+        Cblocks{i} = sqrt(rec_args.beta) * lpsutl.finite_diff(A.idim,i);
+    end
+    Cblocks{4} = sqrt(rec_args.beta_t) * lpsutl.finite_diff([A.idim,1],4);
+    C = lpsutl.block_col(Cblocks,0);
 end
 
 %% solve with CG

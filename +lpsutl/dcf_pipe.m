@@ -1,4 +1,4 @@
-function W = dcf_pipe(F,niter)
+function W = dcf_pipe(F,niter,usepar)
 % returns density compensation weighting Fatrix for non-uniform nufft F
 % using Jim Pipe's method
 % reference:
@@ -10,6 +10,7 @@ function W = dcf_pipe(F,niter)
 % inputs:
 % F - NUFFT operator(s)
 % niter - number of iterations
+% usepar - option to parallelize computation over operators
 %
 % outputs:
 % W - density compensation weighting operator (diagonal fatrix)
@@ -19,12 +20,25 @@ function W = dcf_pipe(F,niter)
         niter = 3;
     end
 
-    wi = ones(size(F,1),1);
-    for itr = 1:niter
-        wd = real( F.arg.st.interp_table(F.arg.st, ...
-            F.arg.st.interp_table_adj(F.arg.st, wi) ) );
-        wi = wi ./ wd;
+    if iscell(F)
+        W = cell(length(F),1);
+        if usepar
+            parfor i = 1:length(F)
+                W{i} = lpsutl.dcf_pipe(F{i},niter);
+            end
+        else
+            for i = 1:length(F)
+                W{i} = lpsutl.dcf_pipe(F{i},niter);
+            end
+        end
+    else
+        wi = ones(size(F,1),1);
+        for itr = 1:niter
+            wd = real( F.arg.st.interp_table(F.arg.st, ...
+                F.arg.st.interp_table_adj(F.arg.st, wi) ) );
+            wi = wi ./ wd;
+        end
+        W = Gdiag(wi / sum(abs(wi)));
     end
-    W = Gdiag(wi / sum(abs(wi)));
     
 end

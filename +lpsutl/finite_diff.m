@@ -4,7 +4,7 @@ function D = finite_diff(sz,dim,bc)
 %
 % inputs:
 % sz - size of array to compute finite difference over
-% dim - dimension to compute finite difference over
+% dim - dimension(s) to compute finite difference over
 % bc - boundary condition ('dirichlet' (default), 'neumann', or 'periodic')
 %
 % outputs:
@@ -15,13 +15,22 @@ function D = finite_diff(sz,dim,bc)
         bc = 'dirichlet';
     end
 
-    % set up fatrix operator
-    D = fatrix2(...
-        'idim', sz, ...
-        'odim', sz, ...
-        'forw', @(~,x) finite_diff_forw(x,dim,bc), ...
-        'back', @(~,y) finite_diff_back(y,dim,bc) ...
-        );
+    if length(dim) > 1
+        Dblocks = cell(length(dim),1);
+        for i = 1:length(dim) % loop through dimensions
+            Dblocks{i} = lpsutl.finite_diff(sz,dim(i),bc);
+        end
+        % append operators as block column matrix
+        D = lpsutl.block_col(Dblocks,0);
+    else
+        % set up fatrix operator
+        D = fatrix2(...
+            'idim', sz, ...
+            'odim', sz, ...
+            'forw', @(~,x) finite_diff_forw(x,dim,bc), ...
+            'back', @(~,y) finite_diff_back(y,dim,bc) ...
+            );
+    end
 
 end
 
@@ -31,7 +40,8 @@ function y = finite_diff_forw(x,dim,bc)
     nd = ndims(x);
 
     % permute the object so that desired dimension is last
-    x_tmp = permute(x,[setdiff(1:nd, dim, 'stable'),dim]);
+    perm = [setdiff(1:nd, dim, 'stable'),dim];
+    x_tmp = permute(x,perm);
     xv = reshape(x_tmp,[],size(x,dim)); % column vectorize
 
     % pad with boundary condition
@@ -54,8 +64,9 @@ function y = finite_diff_forw(x,dim,bc)
     end
 
     % reshape and permute back
-    y_tmp = reshape(yv, size(x));
-    y = permute(y_tmp,[setdiff(1:nd, dim, 'stable'),dim]);
+    y_tmp = reshape(yv, size(x_tmp));
+    [~,invperm] = sort(perm);
+    y = permute(y_tmp,invperm);
 
 end
 
@@ -65,7 +76,8 @@ function x = finite_diff_back(y,dim,bc)
     nd = ndims(y);
 
     % permute the object so that desired dimension is last
-    y_tmp = permute(y,[setdiff(1:nd, dim, 'stable'),dim]);
+    perm = [setdiff(1:nd, dim, 'stable'),dim];
+    y_tmp = permute(y,perm);
     yv = reshape(y_tmp,[],size(y,dim)); % column vectorize
 
     % take adjoint finite difference
@@ -91,7 +103,8 @@ function x = finite_diff_back(y,dim,bc)
     end
 
     % reshape and permute back
-    x_tmp = reshape(xv, size(y));
-    x = permute(x_tmp,[setdiff(1:nd, dim, 'stable'),dim]);
+    x_tmp = reshape(xv, size(y_tmp));
+    [~,invperm] = sort(perm);
+    x = permute(x_tmp,invperm);
 
 end

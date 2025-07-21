@@ -22,7 +22,7 @@ function ob = block_col(Ablocks,usepar)
     imask = Ablocks{1}.imask;
     omask = [];
     for i = 1:nblocks
-        omask = cat(length(Ablocks{1}.idim)+1, omask, Ablocks{i}.omask);
+        omask = cat(length(Ablocks{1}.odim)+1, omask, Ablocks{i}.omask);
     end
     omask = 1*omask > 0;
 
@@ -48,10 +48,18 @@ function y = block_col_forw(Ablocks, x, usepar)
     if usepar && nblocks > 1
         parfor i = 1:nblocks
             yblocks{i} = Ablocks{i} * x;
+            if isscalar(Ablocks{i}.idim) % handle 1D input case
+                yblocks{i} = fatrix2_embed(Ablocks{i}.omask, ...
+                    Ablocks{i}.odim, yblocks{i});
+            end
         end
     else
         for i = 1:nblocks
             yblocks{i} = Ablocks{i} * x;
+            if isscalar(Ablocks{i}.idim) % handle 1D input case
+                yblocks{i} = fatrix2_embed(Ablocks{i}.omask, ...
+                    Ablocks{i}.odim, yblocks{i});
+            end
         end
     end
 
@@ -67,7 +75,7 @@ function x = block_col_back(Ablocks, y, usepar)
     ytmp = reshape(y,prod(Ablocks{1}.odim),nblocks);
     yblocks = cell(nblocks,1);
     for i = 1:nblocks
-        yblocks{i} = reshape(ytmp(:,i),Ablocks{1}.odim);
+        yblocks{i} = reshape(ytmp(:,i),[Ablocks{1}.odim,1]);
     end
     xblocks = cell(nblocks,1);
 
@@ -75,10 +83,18 @@ function x = block_col_back(Ablocks, y, usepar)
     if usepar && nblocks > 1
         parfor i = 1:nblocks
             xblocks{i} = Ablocks{i}' * yblocks{i};
+            if isscalar(Ablocks{i}.odim) % handle 1D output case
+                xblocks{i} = fatrix2_embed(Ablocks{i}.imask, ...
+                    Ablocks{i}.idim, xblocks{i});
+            end
         end
     else
         for i = 1:nblocks
             xblocks{i} = Ablocks{i}' * yblocks{i};
+            if isscalar(Ablocks{i}.odim) % handle 1D output case
+                xblocks{i} = fatrix2_embed(Ablocks{i}.imask, ...
+                    Ablocks{i}.idim, xblocks{i});
+            end
         end
     end
 
