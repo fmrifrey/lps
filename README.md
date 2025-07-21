@@ -31,9 +31,9 @@ A single block (TR) of a basic LpS pulse sequence is shown in the figure below:
 
 ### Reconstruction model
 
-For a single volume, the acquisition of LpS data can be modeled as:
+For a single TR, the acquisition of LpS data can be modeled as:
 
-$$ b = (A_\text{in} + A_\text{out}) x + \epsilon $$
+$$b = (A_\text{in} + A_\text{out}) x + \epsilon$$
 
 where:
 - $$x \in \mathbb{C}^N$$: discrete volumetric image
@@ -44,12 +44,12 @@ where:
 - $$Q \in \mathbb{Z}$$: number of coil channels for parallel imaging
 - $$A_\text{in},A_\text{out} \in \mathbb{C}^{MQ \times N}$$: multi-channel k-space encoding matrices for the in-spoke and out-spoke data, respectively, i.e.:
 
-$$ A_\text{in/out} = (I_Q \otimes F_\text{in/out}) S $$
+$$A_\text{in/out} = (I_Q \otimes F_\text{in/out})\ S$$
 
 - $$I_Q \in \mathbb{R}^{Q \times Q}$$: rank $$Q$$ identity matrix
 - $$F_\text{in/out} \in \mathbb{C}^{M \times N}$$: Fourier encoding matrix for the in- or out-spoke (typically substituted for an nuFFT operator), i.e.:
 
-$$ F_\text{in/out} = \exp{ (-j 2 \pi k_\text{in/out} r^T ) } $$
+$$F_\text{in/out} = \exp{ (-j 2 \pi k_\text{in/out} r^T ) }$$
 
 - $$k_\text{in/out} \in \mathbb{R}^{M \times 3}$$: non-cartesian 3D k-space sample coordinates for the in- or out-spoke
 - $$r \in \mathbb{R}^{N \times 3}$$: cartesian image space sampling coordinates
@@ -66,11 +66,17 @@ $$
 
 - $$s_q \in \mathbb{C}^N$$: volumetric coil sensitivity map of the $$q$$ th channel
 
-Additionally, we often account for the ill-conditioning at the edges of k-space by applying a Fermi-shaped filter to the k-space data, i.e.:
+Additionally, we often account for the ill-conditioning at the edges of k-space due to echo overlap by applying a Fermi-shaped filter to the data which downweights high frequencies, i.e.:
 
-$$ A_\text{in/out} = (I_Q \otimes (H_\text{in/out} F_\text{in/out})) S $$
+$$A_\text{in/out} = (I_Q \otimes (H_\text{in/out} F_\text{in/out}))\ S$$
 
 - $$H_\text{in/out} \in \mathbb{C}^{M \times M}$$: Fermi-shaped k-space filter for the in- or out-spoke, i.e.:
+
+$$H_\text{in/out} = \text{diag}\left( \frac{1}{1 + \exp{\left(2 \pi \frac{|k_\text{in/out}| - \alpha_\text{cutoff}k_\text{max}}{\alpha_\text{rolloff}k_\text{max}} \right)}} \right)$$
+
+- $$|k_\text{in/out}| \in \mathbb{R}^M$$: non-cartesian 3D k-space sample coordinate radii for the in- or out-spoke
+- $$k_\text{max} \in \mathbb{R}$$: maximum k-space sample coordinate radii
+- $$\alpha_\text{cutoff}$$, $$\alpha_\text{rolloff} \in (0,1)$$: Fermi filter cutoff and rolloff parameters, respectively
 
 ## Pulse sequence development
 
