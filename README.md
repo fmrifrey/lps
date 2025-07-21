@@ -43,19 +43,19 @@ $$b_p = (A_{\text{in},p} + A_{\text{out},p})\ x(p\text{ TR}) + \epsilon_p, \quad
 
 where:
 - $$x(t): \mathbb{R} \to \mathbb{C}^{N^3}$$: discrete volumetric image at time $$t$$
-- $$\tilde{N}^3 \in \mathbb{Z}$$: number of <i>reconstructed</i> voxels in single volumetric image
+- $$N^3 \in \mathbb{Z}$$: number of <i>reconstructed</i> voxels in single volumetric image
 - $$b_p \in \mathbb{C}^{MQ}$$: acquired multi-channel k-space data containing overlapping echoes from the $$p^\text{th}$$ 3D k-space projection
 - $$P \in \mathbb{Z}$$: number of 3D k-space projections per volume
 - $$V \in \mathbb{Z}$$: total number of acquired volumes
 - $$\epsilon_p \in \mathbb{C}^{MQ}$$: acqusition noise from the $$p^\text{th}$$ 3D k-space projection
 - $$M \in \mathbb{Z}$$: number of acquired k-space samples per 3D k-space projection
 - $$Q \in \mathbb{Z}$$: number of coil channels for parallel imaging
-- $$A_{\text{in},p},A_{\text{out},p} \in \mathbb{C}^{MQ \times \tilde{N}^3}$$: multi-channel k-space encoding matrices for the in-spoke and out-spoke data of the $$p^\text{th}$$ 3D k-space projection, respectively, i.e.:
+- $$A_{\text{in},p},A_{\text{out},p} \in \mathbb{C}^{MQ \times N^3}$$: multi-channel k-space encoding matrices for the in-spoke and out-spoke data of the $$p^\text{th}$$ 3D k-space projection, respectively, i.e.:
 
 $$A_{\text{in/out},p} = (I_Q \otimes F_{\text{in/out},p})\ S$$
 
 - $$I_Q \in \mathbb{R}^{Q \times Q}$$: rank $$Q$$ identity matrix
-- $$F_{\text{in/out},p} \in \mathbb{C}^{M \times \tilde{N}^3}$$: \*Fourier encoding matrix for the in- or out-spoke of the $$p^\text{th}$$ 3D k-space projection, i.e.:
+- $$F_{\text{in/out},p} \in \mathbb{C}^{M \times N^3}$$: \*Fourier encoding matrix for the in- or out-spoke of the $$p^\text{th}$$ 3D k-space projection, i.e.:
 
 $$F_{\text{in/out},p} \approx \exp{ (-j 2 \pi\ k_{\text{in/out},p}\ r^T ) }$$
 
@@ -66,8 +66,8 @@ $$F_{\text{in/out},p} \approx \exp{ (-j 2 \pi\ k_{\text{in/out},p}\ r^T ) }$$
 $$k_{\text{in/out},p} = k_{\text{in/out},0} R_p^T$$
 
 - $$R_p \in \mathbb{R}^{3 \times 3}$$: 3D golden angle rotation matrix for $$p^\text{th}$$ 3D k-space projection
-- $$r \in \mathbb{R}^{\tilde{N}^3 \times 3}$$: 3D cartesian image space sampling coordinates
-- $$S \in \mathbb{C}^{\tilde{N}^3Q \times \tilde{N}^3}$$: sensitivity encoding operator, i.e.:
+- $$r \in \mathbb{R}^{N^3 \times 3}$$: 3D cartesian image space sampling coordinates
+- $$S \in \mathbb{C}^{N^3Q \times N^3}$$: sensitivity encoding operator, i.e.:
 
 $$
 S = \begin{bmatrix}
@@ -78,7 +78,7 @@ S = \begin{bmatrix}
    \end{bmatrix}
 $$
 
-- $$s_q \in \mathbb{C}^{\tilde{N}^3}$$: discrete volumetric coil sensitivity map of the $$q^\text{th}$$ channel
+- $$s_q \in \mathbb{C}^{N^3}$$: discrete volumetric coil sensitivity map of the $$q^\text{th}$$ channel
 
 #### Echo-in/out filtering
 
@@ -102,7 +102,7 @@ For multi-volumetric imaging, the acquisition can be modeled by using a block ma
 $$\mathbf{b} = \mathbf{A} \mathbf{x} + \mathbf{\epsilon}$$
 
 where:
-- $$\mathbf{x} \in \mathbb{C}^{\tilde{N}^3V}$$: discrete volumetric image timeseries, i.e.:
+- $$\mathbf{x} \in \mathbb{C}^{N^3V}$$: discrete volumetric image timeseries, i.e.:
 
 $$
 \mathbf{x} =
@@ -142,7 +142,7 @@ $$
 $$
 
 - $$\mathbf{\epsilon} \in \mathbb{C}^{MQPV}$$: acquisition noise
-- $$\mathbf{A} \in \mathbb{C}^{MQPV \times \tilde{N}^3V}$$: multi-volume, multi-projection, multi-channel acquisition model, i.e.:
+- $$\mathbf{A} \in \mathbb{C}^{MQPV \times N^3V}$$: multi-volume, multi-projection, multi-channel acquisition model, i.e.:
 
 $$
 \mathbf{A} = 
@@ -177,24 +177,24 @@ We can solve for the best image in terms of $\ell2$ norm error by solving the fo
 
 $$ \mathbf{x}_* = \underset{\mathbf{x}}{\text{argmin}} \text{ ||}\mathbf{A} \mathbf{x} - \mathbf{b}\text{||}_2^2 $$
 
-If the total number of k-space samples is less than the number of reconstructed voxels (i.e. $$MPQ < \tilde{N}^3$$), the problem above is underdetermined, and has infinitely many solutions of the form:
+If the total number of k-space samples is less than the number of reconstructed voxels (i.e. $$MPQ < N^3$$), the problem above is underdetermined, and has infinitely many solutions of the form:
 
 $$ \mathbf{x}_* = \mathbf{A}^+ \mathbf{b} + \mathbf{z}$$
 
 where:
-- $$\mathbf{A}^+ \in \mathbb{C}^{\tilde{N}^3V \times MQPV}$$: right Moore-Penrose psuedoinverse of $$\mathbf{A}$$
-- $$\mathbf{z} \in \mathcal{N}(\mathbf{A})$$: any vector in the $$(\tilde{N}^3 - MQP)V$$-dimensional nullspace of $$\mathbf{A}$$
+- $$\mathbf{A}^+ \in \mathbb{C}^{N^3V \times MQPV}$$: right Moore-Penrose psuedoinverse of $$\mathbf{A}$$
+- $$\mathbf{z} \in \mathcal{N}(\mathbf{A})$$: any vector in the $$(N^3 - MQP)V$$-dimensional nullspace of $$\mathbf{A}$$
 
 In other words, since k-space is undersampled, there are infinitely many ways to fill in the missing frequency components. The nullspace of $$\mathbf{A}$$ represents the missing frequency components. $$\mathbf{A}^+ \mathbf{b}$$ is called the minimum-norm solution, which zero-fills the missing frequency components. This is the solution that contains aliasing which gradient-based methods will converge to. However, with the right choice of $$z$$, the true, un-aliased image is also an equally likely solution in terms of $$\ell2$$ error.
 
-Similarly, we can still acquire enough samples such that $$MPQ > \tilde{N}^3$$ without fully representing all the needed frequency components. This is especially the case in LpS when the edges of 3D k-space are undersampled while the origin is oversampled. In this case, the problem is fully or overdetermined, but ill-conditioned. The problem has an exact solution, $$\mathbf{x}_* = \mathbf{A}^+ \mathbf{b}$$, but is most likely to be dominated by the overfitting of noise. Other solutions that are equally as likely (such as the true image) only differ in data consistency due to subtle differences in the noise profile. To better condition our problem, we can promote or penalize certain solutions based on prior assumptions about the true image by adding a regularization term:
+Similarly, we can still acquire enough samples such that $$MPQ > N^3$$ without fully representing all the needed frequency components. This is especially the case in LpS when the edges of 3D k-space are undersampled while the origin is oversampled. In this case, the problem is fully or overdetermined, but ill-conditioned. The problem has an exact solution, $$\mathbf{x}_* = \mathbf{A}^+ \mathbf{b}$$, but is most likely to be dominated by the overfitting of noise. Other solutions that are equally as likely (such as the true image) only differ in data consistency due to subtle differences in the noise profile. To better condition our problem, we can promote or penalize certain solutions based on prior assumptions about the true image by adding a regularization term:
 
 $$ \mathbf{x}_* = \underset{\mathbf{x}}{\text{argmin}} \text{ ||}\mathbf{A} \mathbf{x} - \mathbf{b}\text{||}_2^2 + g(\mathbf{x})$$
 
 where:
-- $$g(x): \mathbb{C}^{\tilde{N}^3V} \to \mathbb{R}$$: regularization function
+- $$g(x): \mathbb{C}^{N^3V} \to \mathbb{R}$$: regularization function
 
-For example, if $$g(x) = \text{||}(F \otimes I_{\tilde{N}^3})x\text{||}_1$$ where $$F \in \mathbb{C}^{V \times V}$$ is a discrete temporal Fourier Transform operator, solutions which have a sparse temporal frequency representation will be promoted.
+For example, if $$g(x) = \text{||}(F \otimes I_{N^3})x\text{||}_1$$ where $$F \in \mathbb{C}^{V \times V}$$ is a discrete temporal Fourier Transform operator, solutions which have a sparse temporal frequency representation will be promoted.
 
 The problem can then be solved using gradient based methods (i.e. CG, FISTA, PGM), which depend on the choice of regularization function, its convexity/linearity and smoothness.
 
