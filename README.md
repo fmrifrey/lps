@@ -10,7 +10,7 @@ This repository contains vendor-agnostic pulse sequence programming and reconstr
 1. [Table of contents](#table-of-contents)
 2. [Pulse sequence development](#pulse-sequence-development)
    - [Getting started](#getting-started)
-   - [Generating the LpS sequence](#generating-the-lps-sequence)
+   - [Generating the LpS sequence files](#generating-the-lps-sequence-files)
    - [3D GRE calibration sequence](#3d-gre-calibration-sequence)
 3. [Reconstruction](#reconstruction)
    - [Getting started](#getting-started)
@@ -57,10 +57,25 @@ The script [`lps_psd_demo.m`](lps_psd_demo.m) contains demo code to generate a s
 
 To generate the LpS sequence files, run the function [`lps_write_seq.m`](lps_write_seq.m). This function can be ran without any input arguments to generate files based on GE scanner defaults.
 
-Several parameters can be set when running the function:
-| Parameter name | Type | Description |
-| --- | --- | --- |
-
+Several parameters can be set when running [`lps_write_seq.m`](lps_write_seq.m):
+| Parameter name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `sys` | struct | GE system | Pulseq system structure (see [`get_scanner_defaults.m`](+lpsutl/get_scanner_defaults.m)) |
+| `dir` | string | current directory | output directory name |
+| `tr` | float | 100 | repetition time (ms) |
+| `fov` | float | 20 | field of view (cm) |
+| `N_nom` | int | 128 | nominal matrix size (i.e. $$k_\text{max} = \frac{N_\text{nom}}{\text{fov}}$$) |
+| `dummyshots` | int | 20 | number of dummy shots at beginning of sequence (to reach steady state) |
+| `nrep` | int | 1 | number of repeated projections (i.e. $$P = n_\text{rep} \times n_\text{int} \times n_\text{prj}$$) |
+| `nint` | int | 1 | number of in-plane rotations (interleaves) (i.e. $$P = n_\text{rep} \times n_\text{int} \times n_\text{prj}$$) |
+| `nprj` | int | 16 | number of thru-plane rotations (i.e. $$P = n_\text{rep} \times n_\text{int} \times n_\text{prj}$$) |
+| `nspokes` | int | 23 | number of spokes/rf excitations per plane |
+| `t_seg` | float | 1120 | spoke length (us) |
+| `t_rf` | float | 16 | rf pulse width (us) |
+| `fa` | float | 4 | rf flip angle (degrees) |
+| `plotseq` | bool | 0 | option to plot the sequence |
+| `pislquant` | int | 1 | number of TRs to acquire during prescan |
+| `writepge` | bool | 1 | option to write out .pge file to run on GE scanners |
 
 ### 3D GRE calibration sequence
 
