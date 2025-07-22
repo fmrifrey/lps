@@ -37,7 +37,7 @@ function gre3d_write_seq(varargin)
     arg.dir = pwd; % output destination for files
     arg.te = 'min'; % TE (ms)
     arg.tr = 30; % TR (ms)
-    arg.fov = 16; % fov (cm)
+    arg.fov = 20; % fov (cm)
     arg.slabfrac = 0.7; % excitation slab width (fraction of fov)
     arg.fa = 6; % flip angle (deg)
     arg.rfspoil = true; % RF spoiling option

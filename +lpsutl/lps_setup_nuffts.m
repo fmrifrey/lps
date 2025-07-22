@@ -8,7 +8,7 @@ function [Fs_in,Fs_out,b] = lps_setup_nuffts(kdata,k_in,k_out,seq_args,varargin)
 % ints2use - number of interleaves to use (leave empty for all)
 % reps2use - number of repetitions to use (leave empty for all)
 % volwidth - rotations per volume (number of prjs/ints/reps to use per vol)
-% M - reconstructed matrix size
+% N - reconstructed matrix size
 % stride - number of rotations overlapping in each volume (not yet
 % implemented)
 % (also reads arguments from seq_args.mat file in current directory)
@@ -27,7 +27,7 @@ function [Fs_in,Fs_out,b] = lps_setup_nuffts(kdata,k_in,k_out,seq_args,varargin)
     arg.prjs2use = [];
     arg.reps2use = [];
     arg.volwidth = [];
-    arg.M = seq_args.N; % recon matrix size
+    arg.N = seq_args.N; % recon matrix size
     arg.rmspoke1 = true; % option to remove first spoke data
     arg.rmspokeN = true; % option to remove last spoke data
     arg.stride = 0; % still need to implement
@@ -69,8 +69,8 @@ function [Fs_in,Fs_out,b] = lps_setup_nuffts(kdata,k_in,k_out,seq_args,varargin)
     k_out = reshape(k_out,[],nvol,3);
 
     % convert trajectory to spatial frequencies
-    omega_in = 2*pi*seq_args.fov/arg.M * k_in;
-    omega_out = 2*pi*seq_args.fov/arg.M * k_out;
+    omega_in = 2*pi*seq_args.fov/arg.N * k_in;
+    omega_out = 2*pi*seq_args.fov/arg.N * k_out;
 
     % format the kspace measurements volume-wise
     b = reshape(kdata,[],nvol,nc);
@@ -81,14 +81,14 @@ function [Fs_in,Fs_out,b] = lps_setup_nuffts(kdata,k_in,k_out,seq_args,varargin)
     Fs_out = cell(nvol,1);
 
     % create spherical mask
-    [Xgrd,Ygrd,Zgrd] = ndgrid(linspace(-1,1,arg.M), ...
-        linspace(-1,1,arg.M), ...
-        linspace(-1,1,arg.M));
+    [Xgrd,Ygrd,Zgrd] = ndgrid(linspace(-1,1,arg.N), ...
+        linspace(-1,1,arg.N), ...
+        linspace(-1,1,arg.N));
     msk = (Xgrd.^2 + Ygrd.^2 + Zgrd.^2) <= 1;
     
     % set up volume-wise dcf objects
-    nufft_args = {arg.M*ones(1,3), 6*ones(1,3), 2*arg.M*ones(1,3), ...
-        arg.M/2*ones(1,3), 'table', 2^10, 'minmax:kb'};
+    nufft_args = {arg.N*ones(1,3), 6*ones(1,3), 2*arg.N*ones(1,3), ...
+        arg.N/2*ones(1,3), 'table', 2^10, 'minmax:kb'};
 
     % loop through volumes
     for ivol = 1:nvol

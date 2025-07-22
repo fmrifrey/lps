@@ -48,7 +48,7 @@ function [kdata,k_in,k_out,seq_args] = lps_convert_data(safile, h5file)
     [~,~,~,k_in0,k_out0] = lpsutl.gen_lps_waveforms( ...
         'sys', seq_args.sys, ... % pulseq mr system object
         'fov', seq_args.fov, ... % fov (cm)
-        'N', seq_args.N, ... % nominal matrix size
+        'N', seq_args.N_nom, ... % nominal matrix size
         'nspokes', seq_args.nspokes, ... % number of lps spokes
         't_seg', seq_args.t_seg, ... % number of samples/segment
         't_rf', seq_args.t_rf, ... % number of samples/rf pulse

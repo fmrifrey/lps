@@ -7,7 +7,7 @@ function lps_write_seq(varargin)
 % dir - output directory name
 % tr - repetition time (ms)
 % fov - field of view (cm)
-% N - 3D matrix size
+% N_nom - nominal 3D matrix size
 % dummyshots - number of dummy shots (disdaqs) to play
 % nrep - number of rotation sequence repetitions
 % nint - number of interleaves (2D in-plane rotations)
@@ -31,7 +31,7 @@ function lps_write_seq(varargin)
     arg.dir = pwd; % output directory name
     arg.tr = 100; % repetition time (ms)
     arg.fov = 20; % fov (cm)
-    arg.N = 128; % 3D matrix size
+    arg.N_nom = 128; % 3D matrix size
     arg.dummyshots = 20; % number of dummy shots
     arg.nrep = 1; % number of rotation sequence repetitions
     arg.nint = 1; % number of interleaves (2D in-plane rotations)
@@ -55,7 +55,7 @@ function lps_write_seq(varargin)
     [g_wav,rf_wav,rf_del] = lpsutl.gen_lps_waveforms( ...
         'sys', arg.sys, ... % pulseq mr system structure
         'fov', arg.fov, ... % fov (cm)
-        'N', arg.N, ... % nominal matrix size
+        'N', arg.N_nom, ... % nominal matrix size
         'nspokes', arg.nspokes, ... % number of lps spokes
         't_seg', arg.t_seg, ... % time/segment
         't_rf', arg.t_rf, ... % rf pulse width
