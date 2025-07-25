@@ -12,7 +12,7 @@ function ob = kronI(M, A, usepar)
 %
 
     % set default parallelization
-    if nargin < 2 || isempty(usepar)
+    if nargin < 3 || isempty(usepar)
         usepar = 0;
     end
 
