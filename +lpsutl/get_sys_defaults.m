@@ -1,9 +1,10 @@
-function sys = get_sys_defaults(vendor)
+function sys = get_sys_defaults(vendor,varargin)
 % returns pulseq system structure with defaults for given vendor
 % by David Frey (djfrey@umich.edu)
 %
 % inputs:
 % vendor - 'ge' or 'siemens'
+% varargin - extra system modifiers
 %
 % outputs:
 % sys - pulseq system structure
@@ -20,9 +21,10 @@ function sys = get_sys_defaults(vendor)
 				'rfRasterTime', 2e-6, ...
 				'blockDurationRaster', 4e-6, ...
 				'B0', 3, ...
-				'adcDeadTime', 0e-6);
+				'adcDeadTime', 0e-6, ...
+                varargin{:});
 		case 'siemens'
-			sys = mr.opts; % pulseq already defaults to siemens
+			sys = mr.opts(varargin{:}); % pulseq already defaults to siemens
 		otherwise
 			error('invalid vendor');
 	end

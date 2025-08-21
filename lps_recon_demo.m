@@ -1,16 +1,16 @@
 %% set arguments
 basedir = './'; % directory containing data
 fname_kdata = 'raw_data.h5'; % name of input .h5 file (in basedir)
-fname_smaps = 'smaps.h5'; % name of input smaps .h5 file (in basedir)
+fname_smaps = '../smaps.h5'; % name of input smaps .h5 file (in basedir)
 fname_out = sprintf('recon_%s.h5',...
     string(datetime('now','Format','yyyyMMddHHmm'))); % name of output recon .h5 file (in basedir)
 
 % set recon parameters
-rec_args.Q = 4; % number of coils to compress to
+rec_args.Q = 6; % number of coils to compress to
 rec_args.mu_cutoff = 0.85; % kspace cutoff for echo-in/out filtering
 rec_args.sig_rolloff = 0.1; % kspace rolloff for echo-in/out filtering
 rec_args.beta = 2^18; % spatial roughness penalty
-rec_args.beta_t = 2^12; % temporal roughness penalty
+rec_args.beta_t = 0; % temporal roughness penalty
 rec_args.niter = 30; % number of iterations for CG
 rec_args.N = []; % reconstruction matrix size (leave empty for cutoff * N)
 rec_args.ints2use = []; % number of interleaves to use (leave empty for all)
@@ -28,7 +28,7 @@ k_in = str.ktraj.spoke_in;
 k_out = str.ktraj.spoke_out;
 seq_args = str.seq_args;
 if isempty(rec_args.N)
-    rec_args.N = 2*ceil(rec_args.mu_cutoff*seq_args.N/2);
+    rec_args.N = 2*ceil(rec_args.mu_cutoff*seq_args.N_nom/2);
 end
 
 %% set up Fourier encoding operators and data
@@ -69,8 +69,8 @@ end
 %% create the kspace echo-in/out Fermi filters
 fprintf('setting up echo-in/out filters...\n');
 [Hs_in,Hs_out] = lpsutl.lps_setup_filters(Fs_in,Fs_out, ...
-    seq_args.N/rec_args.N*rec_args.mu_cutoff, ... % kspace filter cutoff
-    seq_args.N/rec_args.N*rec_args.sig_rolloff ... % kspace filter rolloff
+    seq_args.N_nom/rec_args.N*rec_args.mu_cutoff, ... % kspace filter cutoff
+    seq_args.N_nom/rec_args.N*rec_args.sig_rolloff ... % kspace filter rolloff
     );
 
 %% load in the sensitivity maps and coil compress
@@ -78,7 +78,7 @@ fprintf('loading sensitivity maps...\n');
 str = lpsutl.loadh5struct(fullfile(basedir,fname_smaps));
 smaps = str.real + 1i*str.imag;
 
-% compress data and get compression matrix
+%% compress data and get compression matrix
 fprintf('coil compressing data...\n');
 [tmp,~,Vr] = ir_mri_coil_compress(permute(b,[1,3,2]),'ncoil',rec_args.Q);
 b = permute(tmp,[1,3,2]);
@@ -91,20 +91,27 @@ smaps = reshape(reshape(smaps,[],size(smaps,4))*Vr,[rec_args.N*ones(1,3),rec_arg
 
 %% create the sensitivity encoding operator
 fprintf('constructing SENSE operator...\n');
-Ss = cell(rec_args.Q,1);
-for i = 1:rec_args.Q
-    smapi = smaps(:,:,:,i);
-    Ss{i} = Gdiag(smapi(Fs_in{1}.imask(:)),'mask',Fs_in{1}.imask);
+if rec_args.Q > 1
+    Ss = cell(rec_args.Q,1);
+    for i = 1:rec_args.Q
+        smapi = smaps(:,:,:,i);
+        Ss{i} = Gdiag(smapi(Fs_in{1}.imask(:)),'mask',Fs_in{1}.imask);
+    end
+    S = lpsutl.block_col(Ss,0);
 end
-S = lpsutl.block_col(Ss,0);
 
 %% create the system matrix
 fprintf('constructing full system matrix...\n');
 As_in = cell(nvol,1);
 As_out = cell(nvol,1);
 for i = 1:nvol % repeat forward encoding for each sense map
-    As_in{i} = lpsutl.kronI(rec_args.Q, Hs_in{i}*Fs_in{i}, par_coils) * S;
-    As_out{i} = lpsutl.kronI(rec_args.Q, Hs_out{i}*Fs_out{i}, par_coils) * S;
+    if rec_args.Q > 1
+        As_in{i} = lpsutl.kronI(rec_args.Q, Hs_in{i}*Fs_in{i}, par_coils) * S;
+        As_out{i} = lpsutl.kronI(rec_args.Q, Hs_out{i}*Fs_out{i}, par_coils) * S;
+    else
+        As_in{i} = Hs_in{i}*Fs_in{i};
+        As_out{i} = Hs_out{i}*Fs_out{i};
+    end
 end
 if nvol == 1 % single volume
     A_in = As_in{1};
@@ -169,10 +176,10 @@ fprintf('solving with CG...\n');
 A_pcg = fatrix2( ...
     'idim', [prod(A.idim),1], ...
     'odim', [prod(A.odim),1], ...
-    'forw', @(~,x) reshape(A*reshape(x,A.idim),[],1), ...
-    'back', @(~,y) reshape(A'*reshape(y,A.odim),[],1) ...
+    'forw', @(~,x) reshape(A*reshape(x,[A.idim,1]),[],1), ...
+    'back', @(~,y) reshape(A'*reshape(y,[A.odim,1]),[],1) ...
     );
-x_star = qpwls_pcg1(x0(:), A_pcg, 1, b(:), C, 'niter', rec_args.niter);
+x_star = qpwls_pcg1(x0(:), A_pcg, 1, b(:), 0, 'niter', rec_args.niter);
 img_lps = reshape(x_star,A.idim);
 
 %% save to h5 recon file

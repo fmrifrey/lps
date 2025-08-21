@@ -35,8 +35,9 @@ function [g,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
     arg = vararg_pair(arg,varargin);
 
     % check that segment/rf widths are valid with given raster time
-    dt_g = round(arg.sys.gradRasterTime*1e6); % (us)
-    dt_rf = round(arg.sys.rfRasterTime*1e6); % (us)
+    dt_g = arg.sys.gradRasterTime*1e6; % (us)
+    dt_adc = arg.sys.adcRasterTime*1e6; % (us)
+    dt_rf = arg.sys.rfRasterTime*1e6; % (us)
     if mod(arg.t_seg,dt_g) > 0 || mod(arg.t_seg,dt_rf) > 0
         error('tseg must be divisible by rf & gradient raster times');
     end
@@ -62,6 +63,13 @@ function [g,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
     gx = g_amp * cos(2*pi * f_loop * n_g*dt_g*1e-6); % (Hz/m)
     gy = g_amp * sin(2*pi * f_loop * n_g*dt_g*1e-6); % (Hz/m)
 
+    % get the gradients at ADC times to calculate k-space trajectory
+    nseg_adc = round(arg.t_seg/dt_adc);
+    n_adc = 0:2*arg.nspokes*nseg_adc-1;
+    gx_adc = gx(floor(dt_adc/dt_g * n_adc) + 1);
+    gy_adc = gy(floor(dt_adc/dt_g * n_adc) + 1);
+    g_adc = [gx_adc(:),gy_adc(:)];
+
     % calculate rf amplitude
     rf_amp = arg.fa / (360 * arg.t_rf*1e-6); % (Hz)
     assert(rf_amp <= arg.sys.maxB1, ...
@@ -84,18 +92,18 @@ function [g,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
     g = [gx(:),gy(:)];
 
     % calculate the full kspace trajectory for each spoke
-    k_spokes = zeros([arg.nspokes*nseg_g,2,arg.nspokes]);
+    k_spokes = zeros([arg.nspokes*nseg_adc,2,arg.nspokes]);
     for v = 1:arg.nspokes
-        idx_spoke = round(t_ramp*1e6/dt_g) + (v-1)*nseg_g + (1:arg.nspokes*nseg_g);
-        k_spokes(:,:,v) = cumsum(g(idx_spoke,:)*1e-2,1)*dt_g*1e-6; % (1/cm)
+        idx_spoke = (v-1)*nseg_adc + (1:arg.nspokes*nseg_adc);
+        k_spokes(:,:,v) = cumsum(g_adc(idx_spoke,:)*1e-2,1)*dt_adc*1e-6; % (1/cm)
     end
     k_spokes = permute(k_spokes,[1,3,2]); % [nseg*nspokes x nspokes x 2]
 
     % isolate in/out spokes
-    k_out = reshape(k_spokes(1:nseg_g,:,:),[],2); % spoke out
-    ktmp = circshift(k_spokes,nseg_g,1); % shift along fast time to get spoke in
+    k_out = reshape(k_spokes(1:nseg_adc,:,:),[],2); % spoke out
+    ktmp = circshift(k_spokes,nseg_adc,1); % shift along fast time to get spoke in
     ktmp = circshift(ktmp,-1,2); % shift along spokes to align spokes in time
-    k_in = reshape(ktmp(1:nseg_g,:,:),[],2); % spoke in
+    k_in = reshape(ktmp(1:nseg_adc,:,:),[],2); % spoke in
 
     % plot the waveforms
     if arg.plotwavs

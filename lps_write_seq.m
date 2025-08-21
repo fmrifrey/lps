@@ -71,7 +71,7 @@ function lps_write_seq(varargin)
         'system', arg.sys);
 
     % create ADC
-    nseg = round(arg.t_seg*1e-6/arg.sys.gradRasterTime);
+    nseg = round(arg.t_seg*1e-6/arg.sys.adcRasterTime);
     acq_len = arg.sys.adcSamplesDivisor*ceil(arg.nspokes*nseg ...
         /arg.sys.adcSamplesDivisor);
     adc = mr.makeAdc(acq_len, ...

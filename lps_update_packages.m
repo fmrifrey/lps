@@ -1,6 +1,8 @@
 % gets the current compatible packages for running code from this repo
 % by David Frey (djfrey@umich.edu)
 
+
+
 %% Pulseq
 fprintf('updating pulseq... ')
 system('[ -d "./pulseq" ] && rm -rf ./pulseq');
@@ -14,6 +16,13 @@ system('[ -d "./MIRT" ] && rm -rf ./MIRT');
 system('git clone git@github.com:JeffFessler/MIRT.git 2> /dev/null');
 run ./MIRT/setup.m
 run ./MIRT/ir_mex_build.m
+fprintf('done.\n')
+
+%% ISMRMRD
+fprintf('updating ismrmrd... ')
+system('[ -d "./ismrmrd" ] && rm -rf ./ismrmrd');
+system('git clone git@github.com:ismrmrd/ismrmrd.git 2> /dev/null');
+addpath ./ismrmrd/matlab
 fprintf('done.\n')
 
 %% PulCeq (for GE pulse sequence development)
