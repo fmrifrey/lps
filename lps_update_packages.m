@@ -33,7 +33,7 @@ fprintf('done.\n')
 %% toppe (for GE pulse sequence development)
 fprintf('updating toppe... ')
 system('[ -d "./toppe" ] && rm -rf ./toppe');
-system('git clone --branch main git@github.com:fmrifrey/toppe.git 2> /dev/null');
+system('git clone --branch main git@github.com:toppeMRI/toppe.git 2> /dev/null');
 addpath toppe
 fprintf('done.\n')
 
