@@ -31,6 +31,7 @@ function [Fs_in,Fs_out,b] = lps_setup_nuffts(kdata,k_in,k_out,seq_args,varargin)
     arg.rmspoke1 = true; % option to remove first spoke data
     arg.rmspokeN = true; % option to remove last spoke data
     arg.stride = 0; % still need to implement
+    arg.msk = 'sphere';
 
     % parse arguments
     arg = vararg_pair(arg,varargin);
@@ -81,12 +82,16 @@ function [Fs_in,Fs_out,b] = lps_setup_nuffts(kdata,k_in,k_out,seq_args,varargin)
     Fs_out = cell(nvol,1);
 
     % create spherical mask
-    [Xgrd,Ygrd,Zgrd] = ndgrid(linspace(-1,1,arg.N), ...
-        linspace(-1,1,arg.N), ...
-        linspace(-1,1,arg.N));
-    msk = (Xgrd.^2 + Ygrd.^2 + Zgrd.^2) <= 1;
-    
-    % set up volume-wise dcf objects
+    if strcmpi(arg.msk,'sphere')
+        [Xgrd,Ygrd,Zgrd] = ndgrid(linspace(-1,1,arg.N), ...
+            linspace(-1,1,arg.N), ...
+            linspace(-1,1,arg.N));
+        msk = (Xgrd.^2 + Ygrd.^2 + Zgrd.^2) <= 1;
+    else
+        msk = true(arg.N*ones(1,3));
+    end
+
+    % set nufft arguments
     nufft_args = {arg.N*ones(1,3), 6*ones(1,3), 2*arg.N*ones(1,3), ...
         arg.N/2*ones(1,3), 'table', 2^10, 'minmax:kb'};
 
@@ -95,10 +100,22 @@ function [Fs_in,Fs_out,b] = lps_setup_nuffts(kdata,k_in,k_out,seq_args,varargin)
         % get trajectory for current vol
         omegav_in = reshape(omega_in(:,ivol,:),[],3);
         omegav_out = reshape(omega_out(:,ivol,:),[],3);
+        
+        % create nufft objects for vol
+        Fv_in = Gnufft(msk, [omegav_in, nufft_args]);
+        Fv_out = Gnufft(msk, [omegav_out, nufft_args]);
 
-        % assemble nufft object for current vol
-        Fs_in{ivol} = Gnufft(msk, [omegav_in, nufft_args]);
-        Fs_out{ivol} = Gnufft(msk, [omegav_out, nufft_args]);
+        % create operator which reshapes the adjoint process
+        Fs_in{ivol} = fatrix2('idim', Fv_in.idim, ...
+            'odim', Fv_in.odim, ...
+            'forw', @(~,x) Fv_in * x, ...
+            'back', @(~,x) embed(Fv_in'*x, msk) ...
+            );
+        Fs_out{ivol} = fatrix2('idim', Fv_out.idim, ...
+            'odim', Fv_out.odim, ...
+            'forw', @(~,x) Fv_out * x, ...
+            'back', @(~,x) embed(Fv_out'*x, msk) ...
+            );
     end
 
 end

@@ -2,15 +2,17 @@
 basedir = './'; % directory containing data
 fname_kdata = './raw_data.h5'; % name of input .h5 file (in basedir)
 fname_smaps = '../smaps.h5'; % name of input smaps .h5 file (in basedir)
+fname_stmaps = './stmaps.h5'; % name of input STM .h5 file (in basedir)
 fname_out = sprintf('recon_%s.h5',...
     string(datetime('now','Format','yyyyMMddHHmm'))); % name of output recon .h5 file (in basedir)
 
 % set recon parameters
-rec_args.Q = 6; % number of coils to compress to
-rec_args.mu_cutoff = 0.5; % kspace cutoff for echo-in/out filtering
-rec_args.sig_rolloff = 0.1; % kspace rolloff for echo-in/out filtering
-rec_args.beta = 2^18; % spatial roughness penalty
-rec_args.beta_t = 0; % temporal roughness penalty
+rec_args.Q = 4; % number of coils to compress to
+rec_args.fermi_cutoff = 0.85; % kspace cutoff for echo-in/out filtering
+rec_args.fermi_rolloff = 0.15; % kspace rolloff for echo-in/out filtering
+rec_args.beta = 2^18; % tikhonov regularization parameter
+rec_args.beta_unfold = 2e12; % UNFOLD regularization parameter
+rec_args.stm_thresh = 0.0005; % STM eigenvalue threshold (to control L(x))
 rec_args.niter = 30; % number of iterations for CG
 rec_args.N = []; % reconstruction matrix size (leave empty for cutoff * N)
 rec_args.ints2use = []; % number of interleaves to use (leave empty for all)
@@ -130,67 +132,16 @@ end
 A = A_in + A_out; % sum of echo-in/out system matrices
 
 %% initialize the solution
-if rec_args.initdcf % initialize with dcf-nuFFT solution
-    fprintf('computing dcf-nufft initialization...\n');    
-    WAs_in = cell(nvol,1);
-    WAs_out = cell(nvol,1);
-    if par_vols
-        parfor i = 1:nvol % repeat forward encoding for each sense map
-            W_in = lpsutl.dcf_pipe(Fs_in{i},3);
-            W_out = lpsutl.dcf_pipe(Fs_out{i},3);
-            WAs_in{i} = lpsutl.kronI(rec_args.Q, W_in * Hs_in{i}*Fs_in{i}, par_coils) * S;
-            WAs_out{i} = lpsutl.kronI(rec_args.Q, W_out * Hs_out{i}*Fs_out{i}, par_coils) * S;
-        end
-    else
-        for i = 1:nvol % repeat forward encoding for each sense map
-            W_in = lpsutl.dcf_pipe(Fs_in{i},3);
-            W_out = lpsutl.dcf_pipe(Fs_out{i},3);
-            WAs_in{i} = lpsutl.kronI(rec_args.Q, W_in * Hs_in{i}*Fs_in{i}, par_coils) * S;
-            WAs_out{i} = lpsutl.kronI(rec_args.Q, W_out * Hs_out{i}*Fs_out{i}, par_coils) * S;
-        end
-    end
-    if nvol == 1 % single volume
-        WA_in = WAs_in{1};
-        WA_out = WAs_out{1};
-    else % each volume is a block in a block diagonal matrix
-        WA_in = lpsutl.block_diag(WAs_in,par_vols);
-        WA_out = lpsutl.block_diag(As_out,par_vols);
-    end
-    WA = WA_in + WA_out;
-    x0 = WA' * b;
-    x0 = ir_wls_init_scale(WA,b,x0);
-else % initialize with zeros
-    fprintf('initializing solution with zeros...\n');
-    x0 = zeros(A.idim);
-end
+fprintf('initializing solution with zeros...\n');
+x0 = zeros(A.idim);
 
-%% make the regularizer (spatial roughness penalty)
-fprintf('creating finite differencing operator...\n');
-C = sqrt(rec_args.beta) * lpsutl.finite_diff(A.idim,1:3);
-
-%% solve with CG
-fprintf('solving with CG...\n');
-
-% create system operator compatible with qpwls_pcg1 function
-A_pcg = fatrix2( ...
-    'idim', [prod(A.idim),1], ...
-    'odim', [prod(A.odim),1], ...
-    'forw', @(~,x) reshape(A*reshape(x,[A.idim,1]),[],1), ...
-    'back', @(~,y) reshape(A'*y,[],1) ...
+%% create regularizers
+I = fatrix2( ...
+    'idim', [rec_args.N*ones(1,3),nvol], ...
+    'odim', [rec_args.N*ones(1,3),nvol], ...
+    'forw', @(~,x) x, ...
+    'back', @(~,x) x ...
     );
-
-% solve with cg
-x_star = qpwls_pcg1(x0, A, 1, b(:), 0, 'niter', rec_args.niter);
-img_lps = reshape(x_star,A.idim);
-
-%% save to h5 recon file
-fprintf('saving to h5 file...\n');
-fname = fullfile(basedir,fname_out);
-if exist(fname, 'file')
-    delete(fname);
-end
-lpsutl.saveh5struct(fname, real(img_lps), '/sol/real');
-lpsutl.saveh5struct(fname, imag(img_lps), '/sol/imag');
-lpsutl.saveh5struct(fname, seq_args, '/seq_args');
-lpsutl.saveh5struct(fname, rec_args, '/rec_args');
-fprintf('reconstruction completed --> saved to %s\n',fname_out);
+PsiF = fatrix2( ...
+    'idim', [rec_args.N*ones(1,3)], ...
+    

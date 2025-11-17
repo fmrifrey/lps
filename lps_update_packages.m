@@ -43,3 +43,10 @@ fprintf('done.\n')
 fprintf('adding orchestra to path... ')
 addpath(getenv('ORCHESTRA_PATH_MATLAB')); % ORCHESTRA_PATH_MATLAB environment variable should point to orchestra folder
 fprintf('done.\n')
+
+%% mapVBVD (for reading in data from Siemens scanners)
+fprintf('updating mapVBVD... ')
+system('[ -d "./mapVBVD" ] && rm -rf ./mapVBVD');
+system('git clone git@github.com:pehses/mapVBVD.git 2> /dev/null');
+addpath mapVBVD
+fprintf('done.\n')
