@@ -32,3 +32,39 @@ function R = rot_3dtga(prjn,intn)
 
 end
 
+% define eul2rotm as to not require user to install robotics toolbox
+function rotm = eul2rotm(eul,sequence)
+
+    % default sequence
+    if nargin > 2 || isempty(sequence)
+        sequence = 'ZYX';
+    else
+        sequence = char(sequence);
+    end
+
+    % x rotation matrix
+    eul_x = eul(char(lower(sequence))=='x');
+    R.X = [cos(eul_x), -sin(eul_x), 0;
+        sin(eul_x), cos(eul_x), 0;
+        0, 0, 1];
+    
+    % y rotation matrix
+    eul_y = eul(char(lower(sequence))=='y');
+    R.Y = [cos(eul_y), 0, sin(eul_y);
+        0, 1, 0;
+        -sin(eul_y), 0, cos(eul_y)];
+    
+    % z rotation matrix
+    eul_z = eul(char(lower(sequence))=='z');
+    R.Z = [1, 0, 0;
+        0, cos(eul_z), -sin(eul_z);
+        0, sin(eul_z), cos(eul_z)];
+    
+    % multiply rotation matrices
+    rotm = eye(3);
+    for i = 3:-1:1
+        rotm = R.(sequence(i)) * rotm;
+    end
+
+end
+
