@@ -12,6 +12,7 @@ function lps_write_seq(varargin)
 % nrep - number of rotation sequence repetitions
 % nint - number of interleaves (2D in-plane rotations)
 % nprj - number of projections (3D thru-plane rotations)
+% necho - number of echoes for multi-echo looping star
 % nspokes - number of looping star spokes
 % t_seg - time per spoke (us)
 % t_rf - rf hard pulse width (us)
@@ -36,6 +37,7 @@ function lps_write_seq(varargin)
     arg.nrep = 1; % number of rotation sequence repetitions
     arg.nint = 1; % number of interleaves (2D in-plane rotations)
     arg.nprj = 16; % number of projections (3D thru-plane rotations)
+    arg.necho = 1; % number of echoes for multi-echo lps
     arg.nspokes = 23; % number of lps spokes
     arg.t_seg = 1120; % time/segment (us)
     arg.t_rf = 16; % time/rf pulse (us)
@@ -52,14 +54,12 @@ function lps_write_seq(varargin)
     warning('OFF', 'mr:restoreShape');
 
     % create looping star waveforms
-    [g_wav,rf_wav,rf_del] = lpsutl.gen_lps_waveforms( ...
+    [gx,gy,gx_start,gy_start,gx_end,gy_end,t_ramp] = lpsutl.gen_lps_waveforms( ...
         'sys', arg.sys, ... % pulseq mr system structure
         'fov', arg.fov, ... % fov (cm)
         'N', arg.N_nom, ... % nominal matrix size
         'nspokes', arg.nspokes, ... % number of lps spokes
-        't_seg', arg.t_seg, ... % time/segment
-        't_rf', arg.t_rf, ... % rf pulse width
-        'fa', arg.fa ... % rf flip angle (deg)
+        't_seg', arg.t_seg ... % time/segment
         );
     g_wav = padarray(g_wav, [1,0], 'both');
     
