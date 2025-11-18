@@ -33,7 +33,7 @@ function lps_write_seq(varargin)
     arg.tr = 100; % repetition time (ms)
     arg.fov = 20; % fov (cm)
     arg.N_nom = 128; % 3D matrix size
-    arg.dummyshots = 20; % number of dummy shots
+    arg.dummyshots = 1; % number of dummy shots
     arg.nrep = 1; % number of rotation sequence repetitions
     arg.nint = 1; % number of interleaves (2D in-plane rotations)
     arg.nprj = 16; % number of projections (3D thru-plane rotations)
@@ -54,52 +54,72 @@ function lps_write_seq(varargin)
     warning('OFF', 'mr:restoreShape');
 
     % create looping star waveforms
-    [gx,gy,gx_start,gy_start,gx_end,gy_end,t_ramp] = lpsutl.gen_lps_waveforms( ...
+    [gx,gy,gx_start,gy_start,t_ramp] = lpsutl.gen_lps_waveforms( ...
         'sys', arg.sys, ... % pulseq mr system structure
         'fov', arg.fov, ... % fov (cm)
         'N', arg.N_nom, ... % nominal matrix size
         'nspokes', arg.nspokes, ... % number of lps spokes
         't_seg', arg.t_seg ... % time/segment
         );
-    g_wav = padarray(g_wav, [1,0], 'both');
     
-    % create gradient waveform objects for fID portion
-    gx_fid = mr.makeArbitraryGrad('x', 0.99*g_wav(1:end/2,1).', ...
+    % create gradient waveform objects for each segment
+    gx_objs = cell(arg.nspokes,1);
+    gy_objs = cell(arg.nspokes,1);
+    for spoke = 1:arg.nspokes
+        gx_objs{spoke} = mr.makeArbitraryGrad('x', 0.99*gx(:,spoke).', ...
             'system', arg.sys, ...
-            'first', 0.99*g_wav(1,1), ...
-            'last', 0.99*g_wav(end/2,1));
-    gy_fid = mr.makeArbitraryGrad('y', 0.99*g_wav(1:end/2,2).', ...
-        'system', arg.sys, ...
-        'first', 0.99*g_wav(1,2), ...
-        'last', 0.99*g_wav(end/2,2));
-    
-    % create gradient waveform objects for GRE portion
-    gx_gre = mr.makeArbitraryGrad('x', 0.99*g_wav(end/2+1:end,1).', ...
+            'first', 0.99*gx_start(mod(spoke-1,arg.nspokes)+1), ...
+            'last', 0.99*gx_start(mod(spoke,arg.nspokes)+1));
+        gy_objs{spoke} = mr.makeArbitraryGrad('y', 0.99*gy(:,spoke).', ...
             'system', arg.sys, ...
-            'first', 0.99*g_wav(end/2,1), ...
-            'last', 0.99*g_wav(end,1));
-    gy_gre = mr.makeArbitraryGrad('y', 0.99*g_wav(end/2+1:end,2).', ...
-        'system', arg.sys, ...
-        'first', 0.99*g_wav(end/2,2), ...
-        'last', 0.99*g_wav(end,2));
-    
-    % create rf (only take 1st half to play during block 1)
-    rf = mr.makeArbitraryRf( ...
-        rf_wav, arg.nspokes*arg.fa*pi/180, ...
-        'delay', rf_del, ...
+            'first', 0.99*gy_start(mod(spoke-1,arg.nspokes)+1), ...
+            'last', 0.99*gy_start(mod(spoke,arg.nspokes)+1));
+    end
+
+    % create hard rf subpulse for single segment
+    rf_obj = mr.makeBlockPulse( ...
+        arg.fa*pi/180, ...
+        'Duration', arg.t_rf*1e-6, ...
         'use', 'excitation', ...
         'system', arg.sys);
 
-    % create ADC
-    nseg = round(arg.t_seg*1e-6/arg.sys.adcRasterTime);
-    acq_len = arg.sys.adcSamplesDivisor*ceil(arg.nspokes*nseg ...
-        /arg.sys.adcSamplesDivisor);
-    adc = mr.makeAdc(acq_len, ...
-        'Duration', arg.sys.adcRasterTime*acq_len, ...
-        'system', arg.sys);
+    % create ADC for single segment, each echo
+    adc_objs = cell(arg.necho+1,1);
+    for echo = 1:arg.necho+1
+        if echo == 1 % fID - wait for hard pulse to finish
+            acq_del = mr.calcDuration(rf_obj) + rf_obj.ringdownTime;
+        else % GRE - entire acq.
+            acq_del = 0;
+        end
+        nseg = round((arg.t_seg*1e-6 - acq_del)/arg.sys.adcRasterTime);
+        acq_len = arg.sys.adcSamplesDivisor*ceil(nseg ...
+            /arg.sys.adcSamplesDivisor);
+        adc_objs{echo} = mr.makeAdc(acq_len, ...
+            'Delay', acq_del, ...
+            'Duration', arg.sys.adcRasterTime*acq_len, ...
+            'system', arg.sys);
+    end
+
+    % create ramp objects
+    nramp = ceil(t_ramp/arg.sys.gradRasterTime);
+    ramp_wav = 1/nramp * ((0:nramp - 1) + 0.5);
+    gx_ramp_up_obj = mr.makeArbitraryGrad('x', ...
+        0.99*gx_start(1)*ramp_wav, ...
+        'system', arg.sys, ...
+        'first', 0, ...
+        'last', 0.99*gx_start(1));
+    gx_ramp_down_obj = mr.makeArbitraryGrad('x', ...
+        0.99*gx_start(1)*(1-ramp_wav), ...
+        'system', arg.sys, ...
+        'first', 0.99*gx_start(1), ...
+        'last', 0);
 
     % create TR delay
-    delay_time = arg.sys.blockDurationRaster*ceil((arg.tr*1e-3 - arg.sys.gradRasterTime*size(g_wav,1))/arg.sys.blockDurationRaster);
+    tr_min = 2*t_ramp + (arg.necho+1)*(arg.t_seg*1e-6)*arg.nspokes;
+    if arg.tr*1e-3 < tr_min
+        error('specified tr (%.3f ms) < min tr (%.3f ms)', arg.tr, tr_min*1e3);
+    end
+    delay_time = arg.sys.blockDurationRaster*ceil((arg.tr*1e-3 - tr_min)/arg.sys.blockDurationRaster);
     tr_delay = mr.makeDelay(delay_time);
     
     % define sequence blocks
@@ -119,21 +139,76 @@ function lps_write_seq(varargin)
         end
         
         % make rotation object from rotation matrix
-        rot = mr.makeRotation(R);
+        rot_obj = mr.makeRotation(R);
 
-        % write fID portion to sequence
-        seq.addBlock(rf, gx_fid, gy_fid, rot, ...
-            mr.makeLabel('SET','TRID', ...
-            1 + isDummyTR + 2*isReceiveGainCalibrationTR));
+        % make label object for current TR
+        lbl_obj = mr.makeLabel('SET','TRID', ...
+            1 + isDummyTR + 2*isReceiveGainCalibrationTR);
 
-        % write GRE portion to sequence
-        if isDummyTR
-            seq.addBlock(gx_gre, gy_gre, rot); % no adc
-        else
-            seq.addBlock(adc, gx_gre, gy_gre, rot);
+        fprintf('TR %d: isDummyTR=%d, isReceiveGainCalibrationTR=%d\n', i, 1*isDummyTR, 1*isReceiveGainCalibrationTR)
+
+        % write ramp up to sequence
+        fprintf('adding ramp-up block for TR %d\n',i);
+        seq.addBlock( ...
+            gx_ramp_up_obj, ... % gradient ramp-up
+            lbl_obj, ... % label object
+            rot_obj ... % rotation object
+            );
+
+        % add fID portion to sequence
+        for spoke = 1:arg.nspokes
+
+            fprintf('adding fID block for TR %d, spoke %d\n',i,spoke);
+            if isDummyTR % no adc
+                seq.addBlock( ...
+                    rf_obj, ... % rf pulse
+                    gx_objs{spoke}, gy_objs{spoke}, ... % gradients
+                    rot_obj ... % rotation object
+                    );
+            else
+                seq.addBlock( ...
+                    rf_obj, ... % rf pulse
+                    ... adc_objs{1}, ... % fID adc object
+                    gx_objs{spoke}, gy_objs{spoke}, ... % gradients
+                    rot_obj ... % rotation object
+                    );
+            end
+
         end
 
+
+        % loop through echoes
+        for echo = 1:arg.necho
+
+            % loop through segments (spokes)
+            for spoke = 1:arg.nspokes
+
+                fprintf('adding GRE block for TR %d, echo %d, spoke %d\n',i,echo,spoke);
+                if isDummyTR % no adc
+                    seq.addBlock( ...
+                        gx_objs{spoke}, gy_objs{spoke}, ... % gradients
+                        rot_obj ... % rotation object
+                        );
+                else
+                    seq.addBlock( ...
+                        adc_objs{echo+1}, ... % echo adc object
+                        gx_objs{spoke}, gy_objs{spoke}, ... % gradients
+                        rot_obj ... % rotation object
+                        );
+                end
+
+            end
+        end
+
+        % write ramp down to sequence
+        fprintf('adding ramp-down block for TR %d\n',i);
+        seq.addBlock( ...
+            gx_ramp_down_obj, ... % ramp-down object
+            rot_obj ... % rotation object
+            );
+
         % add tr delay
+        fprintf('adding delay block for TR %d\n',i);
         seq.addBlock(tr_delay);
 
     end

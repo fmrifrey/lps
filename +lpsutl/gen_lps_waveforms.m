@@ -1,4 +1,4 @@
-function [gx,gy,gx_start,gy_start,gx_end,gy_end,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
+function [gx,gy,gx_start,gy_start,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
 % generates gradient and rf waveforms for a single looping star TR, also
 % returns trajectory
 % by David Frey (djfrey@umich.edu)
@@ -15,8 +15,6 @@ function [gx,gy,gx_start,gy_start,gx_end,gy_end,t_ramp,k_in,k_out] = gen_lps_wav
 % gy - y gradient waveforms for each spoke (Hz/m)
 % gx_start - x gradient start value for each spoke (Hz/m)
 % gy_start - y gradient start value for each spoke (Hz/m)
-% gx_end - x gradient end value for each spoke (Hz/m)
-% gy_end - y gradient end value for each spoke (Hz/m)
 % t_ramp - ramp time (s)
 % k_in - kspace spoke-in trajectory (1/cm)
 % k_out - kspace spoke-out trajectory (1/cm)
@@ -52,28 +50,25 @@ function [gx,gy,gx_start,gy_start,gx_end,gy_end,t_ramp,k_in,k_out] = gen_lps_wav
     assert(s_amp <= arg.sys.maxSlew, ...
         'slew rate exceeds limit with given parameters')
 
-    % construct looping star gradients (nseg-1 x nspokes)
+    % construct looping star gradients (nseg x nspokes)
     nseg_g = round(arg.t_seg/dt_g);
-    n_g = (0:arg.nspokes*(nseg_g-1)-1) + 0.5;
+    n_g = (0:arg.nspokes*nseg_g-1) + 0.5; % sampled at center of each raster
     gx = g_amp * cos(2*pi * f_loop * n_g*dt_g*1e-6); % (Hz/m)
     gy = g_amp * sin(2*pi * f_loop * n_g*dt_g*1e-6); % (Hz/m)
-    gx = reshape(gx,nseg_g-1,arg.nspokes);
-    gy = reshape(gy,nseg_g-1,arg.nspokes);
+    gx = reshape(gx,nseg_g,arg.nspokes);
+    gy = reshape(gy,nseg_g,arg.nspokes);
 
     % get start/end gradient values for each block (nspokes)
     n_start = (0:arg.nspokes-1)*nseg_g;
-    n_end = n_start + nseg_g;
     gx_start = g_amp * cos(2*pi * f_loop * n_start*dt_g*1e-6); % (Hz/m)
     gy_start = g_amp * sin(2*pi * f_loop * n_start*dt_g*1e-6); % (Hz/m)
-    gx_end = g_amp * cos(2*pi * f_loop * n_end*dt_g*1e-6); % (Hz/m)
-    gy_end = g_amp * sin(2*pi * f_loop * n_end*dt_g*1e-6); % (Hz/m)
 
     % get the gradients at ADC times to calculate k-space trajectory
     nseg_adc = round(arg.t_seg/dt_adc);
     n_adc = 0:arg.nspokes*nseg_adc-1;
-    gx_adc = interp1(dt_g*n_g,gx(:),dt_adc*n_adc,'linear','extrap');
+    gx_adc = interp1(dt_g*n_g,gx(:),dt_adc*n_adc,'nearest','extrap');
     gx_adc(1) = g_amp; gx_adc(end) = g_amp; % force 1 value at beginning and end
-    gy_adc = interp1(dt_g*n_g,gy(:),dt_adc*n_adc,'linear','extrap');
+    gy_adc = interp1(dt_g*n_g,gy(:),dt_adc*n_adc,'nearest','extrap');
     gy_adc(1) = 0; gy_adc(end) = 0; % force 0 value at beginning and end
 
     % calculate ramp time
