@@ -91,7 +91,7 @@ function lps_write_seq(varargin)
         else % GRE - entire acq.
             acq_del = 0;
         end
-        nseg = round((arg.t_seg*1e-6 - acq_del)/arg.sys.adcRasterTime);
+        nseg = round((arg.t_seg*1e-6 - acq_del - 60e-6)/arg.sys.adcRasterTime);
         acq_len = arg.sys.adcSamplesDivisor*ceil(nseg ...
             /arg.sys.adcSamplesDivisor);
         adc_objs{echo} = mr.makeAdc(acq_len, ...

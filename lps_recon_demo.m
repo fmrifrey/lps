@@ -1,6 +1,6 @@
 %% set arguments
 basedir = './'; % directory containing data
-fname_kdata = 'raw_data.h5'; % name of input .h5 file (in basedir)
+fname_kdata = 'raw_data_multiecho.h5'; % name of input .h5 file (in basedir)
 fname_smaps = '../smaps.h5'; % name of input smaps .h5 file (in basedir)
 fname_out = sprintf('recon_%s.h5',...
     string(datetime('now','Format','yyyyMMddHHmm'))); % name of output recon .h5 file (in basedir)

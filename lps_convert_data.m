@@ -33,14 +33,14 @@ function [kdata,k_in,k_out,seq_args] = lps_convert_data(safile, h5file)
     end
     
     % loop through shots
-    for i = 1:seq_args.nprj*seq_args.nint*seq_args.nrep
+    for i = 1:seq_args.nspokes*seq_args.necho*seq_args.nprj*seq_args.nint*seq_args.nrep
         currentControl = GERecon('Archive.Next', archive);
         if i == 1
             [ndat,nc] = size(currentControl.Data);
-            kdata = zeros(ndat, nc, seq_args.nint, seq_args.nprj, seq_args.nrep);
+            kdata = zeros(ndat, nc, seq_args.nspokes, seq_args.necho, seq_args.nint, seq_args.nprj, seq_args.nrep);
         end
-        [iint,iprj,irep] = ind2sub([seq_args.nint, seq_args.nprj, seq_args.nrep], i);
-        kdata(:,:,iint,iprj,irep) = currentControl.Data;
+        [ispk,iech,iint,iprj,irep] = ind2sub([seq_args.nspokes, seq_args.necho, seq_args.nint, seq_args.nprj, seq_args.nrep], i);
+        kdata(:,:,ispk,iech,iint,iprj,irep) = currentControl.Data;
     end
     kdata = permute(kdata,[1,3:5,2]); % n x nint x nprj x nrep x nc
 
