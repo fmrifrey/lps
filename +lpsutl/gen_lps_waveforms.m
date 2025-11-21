@@ -1,4 +1,4 @@
-function [gx,gy,gx_start,gy_start,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
+function [gx,gy,g_amp,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
 % generates gradient and rf waveforms for a single looping star TR, also
 % returns trajectory
 % by David Frey (djfrey@umich.edu)
@@ -13,8 +13,7 @@ function [gx,gy,gx_start,gy_start,t_ramp,k_in,k_out] = gen_lps_waveforms(varargi
 % outputs:
 % gx - x gradient waveforms for each spoke (Hz/m)
 % gy - y gradient waveforms for each spoke (Hz/m)
-% gx_start - x gradient start value for each spoke (Hz/m)
-% gy_start - y gradient start value for each spoke (Hz/m)
+% g_amp - gradient amplitude
 % t_ramp - ramp time (s)
 % k_in - kspace spoke-in trajectory (1/cm)
 % k_out - kspace spoke-out trajectory (1/cm)
@@ -57,11 +56,6 @@ function [gx,gy,gx_start,gy_start,t_ramp,k_in,k_out] = gen_lps_waveforms(varargi
     gy = g_amp * sin(2*pi * f_loop * n_g*dt_g*1e-6); % (Hz/m)
     gx = reshape(gx,nseg_g,arg.nspokes);
     gy = reshape(gy,nseg_g,arg.nspokes);
-
-    % get start/end gradient values for each block (nspokes)
-    n_start = (0:arg.nspokes-1)*nseg_g;
-    gx_start = g_amp * cos(2*pi * f_loop * n_start*dt_g*1e-6); % (Hz/m)
-    gy_start = g_amp * sin(2*pi * f_loop * n_start*dt_g*1e-6); % (Hz/m)
 
     % get the gradients at ADC times to calculate k-space trajectory
     nseg_adc = round(arg.t_seg/dt_adc);

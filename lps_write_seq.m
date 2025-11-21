@@ -17,6 +17,7 @@ function lps_write_seq(varargin)
 % t_seg - time per spoke (us)
 % t_rf - rf hard pulse width (us)
 % fa - flip angle (deg)
+% acq_fID - option to acquire fID segments
 % plotseq - option to plot the sequence
 % pislquant - number of TRs to use for prescan
 % writepge - option to convert seq to pge file
@@ -42,6 +43,7 @@ function lps_write_seq(varargin)
     arg.t_seg = 1120; % time/segment (us)
     arg.t_rf = 16; % time/rf pulse (us)
     arg.fa = 4; % rf flip angle (deg)
+    arg.acq_fIDs = false; % option to acquire fID signals
     arg.plotseq = false; % option to plot the sequence
     arg.pislquant = 1; % number of TRs to use for prescan
     arg.writepge = true; % option to convert seq to pge file
@@ -53,65 +55,83 @@ function lps_write_seq(varargin)
     seq = mr.Sequence(arg.sys);
     warning('OFF', 'mr:restoreShape');
 
-    % create looping star waveforms
-    [gx,gy,gx_start,gy_start,t_ramp] = lpsutl.gen_lps_waveforms( ...
+    % create looping star gradient waveforms
+    [gx,gy,g_amp,t_ramp] = lpsutl.gen_lps_waveforms( ...
         'sys', arg.sys, ... % pulseq mr system structure
         'fov', arg.fov, ... % fov (cm)
         'N', arg.N_nom, ... % nominal matrix size
         'nspokes', arg.nspokes, ... % number of lps spokes
         't_seg', arg.t_seg ... % time/segment
         );
-    
-    % create gradient waveform objects for each segment
-    gx_objs = cell(arg.nspokes,1);
-    gy_objs = cell(arg.nspokes,1);
+
+    % create fID rf and ADC objects
+    rf_objs = cell(arg.nspokes,1);
+    adc_fID_objs = cell(arg.nspokes,1);
+    gx_fID_objs = cell(arg.nspokes,1);
+    gy_fID_objs = cell(arg.nspokes,1);
+    fID_acq_len = round((arg.t_seg*1e-6 - arg.t_rf*1e-6 - 2*arg.sys.rfRingdownTime)/arg.sys.adcRasterTime);
+    fID_acq_len = arg.sys.adcSamplesDivisor*floor(fID_acq_len/arg.sys.adcSamplesDivisor);
     for spoke = 1:arg.nspokes
-        gx_objs{spoke} = mr.makeArbitraryGrad('x', 0.99*gx(:,spoke).', ...
+        % gradient objects
+        gx_fID_objs{spoke} = mr.makeArbitraryGrad('x', ...
+            round(0.99*gx(:,spoke)).', ...
             'system', arg.sys, ...
-            'first', 0.99*gx_start(mod(spoke-1,arg.nspokes)+1), ...
-            'last', 0.99*gx_start(mod(spoke,arg.nspokes)+1));
-        gy_objs{spoke} = mr.makeArbitraryGrad('y', 0.99*gy(:,spoke).', ...
+            'first', round(0.99*g_amp*cos(2*pi*(spoke-1)/arg.nspokes)), ...
+            'last', round(0.99*g_amp*cos(2*pi*spoke/arg.nspokes)));
+        gy_fID_objs{spoke} = mr.makeArbitraryGrad('y', ...
+            round(0.99*gy(:,spoke)).', ...
             'system', arg.sys, ...
-            'first', 0.99*gy_start(mod(spoke-1,arg.nspokes)+1), ...
-            'last', 0.99*gy_start(mod(spoke,arg.nspokes)+1));
-    end
+            'first', round(0.99*g_amp*sin(2*pi*(spoke-1)/arg.nspokes)), ...
+            'last', round(0.99*g_amp*sin(2*pi*spoke/arg.nspokes)));
 
-    % create hard rf subpulse for single segment
-    rf_obj = mr.makeBlockPulse( ...
-        arg.fa*pi/180, ...
-        'Duration', arg.t_rf*1e-6, ...
-        'use', 'excitation', ...
-        'system', arg.sys);
+        % rf object
+        rf_objs{spoke} = mr.makeBlockPulse( ...
+            arg.fa*pi/180, ...
+            'Duration', arg.t_rf*1e-6, ...
+            'use', 'excitation', ...
+            'Delay', 0, ...
+            'system', arg.sys);
 
-    % create ADC for single segment, each echo
-    adc_objs = cell(arg.necho+1,1);
-    for echo = 1:arg.necho+1
-        if echo == 1 % fID - wait for hard pulse to finish
-            acq_del = mr.calcDuration(rf_obj) + rf_obj.ringdownTime;
-        else % GRE - entire acq.
-            acq_del = 0;
-        end
-        nseg = round((arg.t_seg*1e-6 - acq_del - 60e-6)/arg.sys.adcRasterTime);
-        acq_len = arg.sys.adcSamplesDivisor*ceil(nseg ...
-            /arg.sys.adcSamplesDivisor);
-        adc_objs{echo} = mr.makeAdc(acq_len, ...
-            'Delay', acq_del, ...
-            'Duration', arg.sys.adcRasterTime*acq_len, ...
+        % adc object
+        adc_fID_objs{spoke} = mr.makeAdc( ...
+            fID_acq_len, ...
+            'Delay', arg.t_rf*1e-6 + arg.sys.rfRingdownTime, ...
+            'Duration', arg.sys.adcRasterTime*fID_acq_len, ...
             'system', arg.sys);
     end
+
+    % create gradient waveform objects for the GRE block
+    gx_GRE_obj = mr.makeArbitraryGrad('x', ...
+        round(0.99*repmat(gx(:).',[1,arg.necho])), ...
+        'system', arg.sys, ...
+        'first', round(0.99*g_amp), ...
+        'last', round(0.99*g_amp));
+    gy_GRE_obj = mr.makeArbitraryGrad('y', ...
+        round(0.99*repmat(gy(:).',[1,arg.necho])), ...
+        'system', arg.sys, ...
+        'first', 0, ...
+        'last', 0);
+
+    % create GRE ADC objects
+    GRE_acq_len = arg.necho*length(gx(:));
+    adc_GRE_obj = mr.makeAdc( ...
+        GRE_acq_len, ...
+        'Delay', 0, ...
+        'Duration', arg.sys.adcRasterTime*GRE_acq_len, ...
+        'system', arg.sys);
 
     % create ramp objects
     nramp = ceil(t_ramp/arg.sys.gradRasterTime);
     ramp_wav = 1/nramp * ((0:nramp - 1) + 0.5);
     gx_ramp_up_obj = mr.makeArbitraryGrad('x', ...
-        0.99*gx_start(1)*ramp_wav, ...
+        0.99*g_amp*ramp_wav, ...
         'system', arg.sys, ...
         'first', 0, ...
-        'last', 0.99*gx_start(1));
+        'last', 0.99*g_amp);
     gx_ramp_down_obj = mr.makeArbitraryGrad('x', ...
-        0.99*gx_start(1)*(1-ramp_wav), ...
+        0.99*g_amp*(1-ramp_wav), ...
         'system', arg.sys, ...
-        'first', 0.99*gx_start(1), ...
+        'first', 0.99*g_amp, ...
         'last', 0);
 
     % create TR delay
@@ -145,70 +165,53 @@ function lps_write_seq(varargin)
         lbl_obj = mr.makeLabel('SET','TRID', ...
             1 + isDummyTR + 2*isReceiveGainCalibrationTR);
 
-        fprintf('TR %d: isDummyTR=%d, isReceiveGainCalibrationTR=%d\n', i, 1*isDummyTR, 1*isReceiveGainCalibrationTR)
-
         % write ramp up to sequence
-        fprintf('adding ramp-up block for TR %d\n',i);
         seq.addBlock( ...
             gx_ramp_up_obj, ... % gradient ramp-up
             lbl_obj, ... % label object
             rot_obj ... % rotation object
             );
 
-        % add fID portion to sequence
+        % loop through spokes
         for spoke = 1:arg.nspokes
-
-            fprintf('adding fID block for TR %d, spoke %d\n',i,spoke);
-            if isDummyTR % no adc
+            % add fID block to sequence
+            if isDummyTR || ~arg.acq_fIDs % no adc
                 seq.addBlock( ...
-                    rf_obj, ... % rf pulse
-                    gx_objs{spoke}, gy_objs{spoke}, ... % gradients
+                    rf_objs{spoke}, ... % rf pulses
+                    gx_fID_objs{spoke}, gy_fID_objs{spoke}, ... % gradients
                     rot_obj ... % rotation object
                     );
             else
                 seq.addBlock( ...
-                    rf_obj, ... % rf pulse
-                    ... adc_objs{1}, ... % fID adc object
-                    gx_objs{spoke}, gy_objs{spoke}, ... % gradients
+                    rf_objs{spoke}, ... % rf pulses
+                    adc_fID_objs{spoke}, ... % fID adc objects
+                    gx_fID_objs{spoke}, gy_fID_objs{spoke}, ... % gradients
                     rot_obj ... % rotation object
                     );
             end
-
         end
 
-
-        % loop through echoes
-        for echo = 1:arg.necho
-
-            % loop through segments (spokes)
-            for spoke = 1:arg.nspokes
-
-                fprintf('adding GRE block for TR %d, echo %d, spoke %d\n',i,echo,spoke);
-                if isDummyTR % no adc
-                    seq.addBlock( ...
-                        gx_objs{spoke}, gy_objs{spoke}, ... % gradients
-                        rot_obj ... % rotation object
-                        );
-                else
-                    seq.addBlock( ...
-                        adc_objs{echo+1}, ... % echo adc object
-                        gx_objs{spoke}, gy_objs{spoke}, ... % gradients
-                        rot_obj ... % rotation object
-                        );
-                end
-
-            end
+        % write GRE block to sequence
+        if isDummyTR % no adc
+            seq.addBlock( ...
+                gx_GRE_obj, gy_GRE_obj, ... % gradients
+                rot_obj ... % rotation object
+                );
+        else
+            seq.addBlock( ...
+                adc_GRE_obj, ... % echo adc object
+                gx_GRE_obj, gy_GRE_obj, ... % gradients
+                rot_obj ... % rotation object
+                );
         end
 
         % write ramp down to sequence
-        fprintf('adding ramp-down block for TR %d\n',i);
         seq.addBlock( ...
             gx_ramp_down_obj, ... % ramp-down object
             rot_obj ... % rotation object
             );
 
         % add tr delay
-        fprintf('adding delay block for TR %d\n',i);
         seq.addBlock(tr_delay);
 
     end
