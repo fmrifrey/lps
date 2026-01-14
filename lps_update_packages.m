@@ -26,8 +26,8 @@ fprintf('done.\n')
 %% PulCeq (for GE pulse sequence development)
 fprintf('updating PulCeq... ')
 system('[ -d "./PulCeq" ] && rm -rf ./PulCeq');
-system('git clone --branch tv7 git@github.com:HarmonizedMRI/PulCeq.git 2> /dev/null');
-addpath PulCeq/matlab
+system('git clone --branch main git@github.com:HarmonizedMRI/PulCeq.git 2> /dev/null');
+addpath(genpath('./PulCeq/matlab'))
 fprintf('done.\n')
 
 %% toppe (for GE pulse sequence development)
