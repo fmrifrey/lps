@@ -1,195 +1,101 @@
-%% set arguments
-basedir = './'; % directory containing data
-fname_kdata = 'raw_data.h5'; % name of input .h5 file (in basedir)
-fname_smaps = '../smaps.h5'; % name of input smaps .h5 file (in basedir)
-fname_out = sprintf('recon_%s.h5',...
-    string(datetime('now','Format','yyyyMMddHHmm'))); % name of output recon .h5 file (in basedir)
+%% Looping Star demo recon script
+% by David Frey
+%% set parameters
+rec_args.fname = './raw_data.h5'; % input raw data .h5 file name (see lps_convert_data.m)
+rec_args.fname_smaps = './smaps.h5'; % smaps input file name
+rec_args.Q = 4; % number of compressed coils to use
+rec_args.N = 64; % recon image size
+rec_args.ints2use = []; % indices of interleaves to include (empty = all)
+rec_args.prjs2use = []; % indices of projections to include (empty = all)
+rec_args.reps2use = []; % indices of repetitions to include (empty = all)
+rec_args.P = 32; % number of projections to use per frame (empty = nint*nprj)
+rec_args.niter = 30; % number of CG iterations
+rec_args.dcf_init = false; % option to initialize solution with density compensated NUFFT
+rec_args.use_parfor = true; % option to use parfor loop in frame/coil-wise NUFFTs
+rec_args.fermi_cutoff = 0.5; % fermi voxel basis function cutoff (frac of nominal resolution)
+rec_args.fermi_rolloff = 0.2; % fermi voxel basis function rolloff (frac of nominal resolution)
+rec_args.beta = 2^14; % quadratic roughness penalty regularization parameter
+rec_args.debug = 0; % debug mode
 
-% set recon parameters
-rec_args.Q = 6; % number of coils to compress to
-rec_args.mu_cutoff = 0.85; % kspace cutoff for echo-in/out filtering
-rec_args.sig_rolloff = 0.1; % kspace rolloff for echo-in/out filtering
-rec_args.beta = 2^18; % spatial roughness penalty
-rec_args.beta_t = 0; % temporal roughness penalty
-rec_args.niter = 30; % number of iterations for CG
-rec_args.N = []; % reconstruction matrix size (leave empty for cutoff * N)
-rec_args.ints2use = []; % number of interleaves to use (leave empty for all)
-rec_args.prjs2use = []; % number of projections to use (leave empty for all)
-rec_args.reps2use = []; % number of repetitions to use (leave empty for all)
-rec_args.P = 32; % number of projections per volume (leave empty for all)
-rec_args.initdcf = 0; % option to initialize with density compensated recon
-rec_args.usepar = 1; % option to parallelize block matrix computations
-
-%% load LpS data from h5 file
-fprintf('loading raw data...\n');
-str = lpsutl.loadh5struct(fullfile(basedir,fname_kdata));
-kdata = str.kdata.real + 1i*str.kdata.imag;
-k_in = str.ktraj.spoke_in;
-k_out = str.ktraj.spoke_out;
-seq_args = str.seq_args;
-if isempty(rec_args.N)
-    rec_args.N = 2*ceil(rec_args.mu_cutoff*seq_args.N_nom/2);
+%% load in data
+fprintf('loading data...\n');
+rec_args.fname = which(rec_args.fname);
+kdata = lpsutl.loadh5struct(rec_args.fname,'/kdata').real + ...
+    1i*lpsutl.loadh5struct(rec_args.fname,'/kdata').imag; % raw kspace data
+seq_args = lpsutl.loadh5struct(rec_args.fname,'/seq_args'); % sequence arguments
+ktraj_in = lpsutl.loadh5struct(rec_args.fname,'/ktraj').spoke_in; % spoke-in kspace trajectory
+ktraj_out = lpsutl.loadh5struct(rec_args.fname,'/ktraj').spoke_out; % spoke-out kspace trajectory
+if isfile(rec_args.fname_smaps)
+    rec_args.fname_smaps = which(rec_args.fname_smaps);
+    smaps = lpsutl.loadh5struct(rec_args.fname_smaps).real + ...
+        1i*lpsutl.loadh5struct(rec_args.fname_smaps).imag; % sensitivity maps
+else
+    smaps = []; % leave empty if no sensitity map file provided
 end
 
-%% set up Fourier encoding operators and data
-fprintf('setting up nufft operators...\n');
+%% format the data and k-space trajectory
+fprintf('formatting data and k-space trajectories...\n');
 if isempty(rec_args.ints2use)
-    rec_args.ints2use = seq_args.nint; % use all unique in-plane rotations
+    rec_args.ints2use = 1:seq_args.nint;
 end
 if isempty(rec_args.prjs2use)
-   rec_args.prjs2use = seq_args.nprj; % use all unique thru-plane rotations
+    rec_args.prjs2use = 1:seq_args.nprj;
 end
 if isempty(rec_args.reps2use)
-    rec_args.reps2use = seq_args.nrep; % use all repetitions
+    rec_args.reps2use = 1:seq_args.nrep;
 end
 if isempty(rec_args.P)
-    rec_args.P = rec_args.ints2use*rec_args.prjs2use; % each rep is a vol
-end
-[Fs_in,Fs_out,b] = lpsutl.lps_setup_nuffts(kdata,k_in,k_out,seq_args, ...
-    'N', rec_args.N, ...
-    'ints2use', rec_args.ints2use, ...
-    'prjs2use', rec_args.prjs2use, ...
-    'reps2use', rec_args.reps2use, ...
-    'volwidth', rec_args.P ...
-    );
-nvol = size(b,3);
-
-%% determine dimensions of parallelization
-if nvol > 1 && rec_args.usepar % parallelize over volumes
-    par_vols = 1;
-    par_coils = 0;
-elseif nvol == 1 && rec_args.usepar % parallelize over coils
-    par_vols = 0;
-    par_coils = 1;
-else % no parallelization
-    par_vols = 0;
-    par_coils = 0;
+    rec_args.P = seq_args.nint*seq_args.nprj;
 end
 
-%% create the kspace echo-in/out Fermi filters
-fprintf('setting up echo-in/out filters...\n');
-[Hs_in,Hs_out] = lpsutl.lps_setup_filters(Fs_in,Fs_out, ...
-    seq_args.N_nom/rec_args.N*rec_args.mu_cutoff, ... % kspace filter cutoff
-    seq_args.N_nom/rec_args.N*rec_args.sig_rolloff ... % kspace filter rolloff
-    );
+% select out desired indices
+Ptotal = length(rec_args.ints2use)*length(rec_args.prjs2use)*length(rec_args.reps2use);
+ktraj_in = reshape(ktraj_in(:,rec_args.ints2use,rec_args.prjs2use,rec_args.reps2use,:),[],Ptotal,3);
+ktraj_out = reshape(ktraj_out(:,rec_args.ints2use,rec_args.prjs2use,rec_args.reps2use,:),[],Ptotal,3);
+kdata = reshape(kdata(:,rec_args.ints2use,rec_args.prjs2use,rec_args.reps2use,:),[],Ptotal,size(kdata,5));
 
-%% load in the sensitivity maps and coil compress
-fprintf('loading sensitivity maps...\n');
-str = lpsutl.loadh5struct(fullfile(basedir,fname_smaps));
-smaps = str.real + 1i*str.imag;
+% reformat into individual frames
+nvol = floor(Ptotal / rec_args.P);
+Ptotal = nvol*rec_args.P;
+ktraj_in = reshape(ktraj_in(:,1:Ptotal,:),[],nvol,3);
+ktraj_out = reshape(ktraj_out(:,1:Ptotal,:),[],nvol,3);
+kdata = reshape(kdata(:,1:Ptotal,:),[],nvol,size(kdata,3));
 
-%% compress data and get compression matrix
-fprintf('coil compressing data...\n');
-[tmp,~,Vr] = ir_mri_coil_compress(permute(b,[1,3,2]),'ncoil',rec_args.Q);
-b = permute(tmp,[1,3,2]);
-
-% upsample smaps
-smaps = lpsutl.resample3d(smaps,rec_args.N*ones(1,3));
-
-% coil compress the smaps
-smaps = reshape(reshape(smaps,[],size(smaps,4))*Vr,[rec_args.N*ones(1,3),rec_args.Q]);
-
-%% create the sensitivity encoding operator
-fprintf('constructing SENSE operator...\n');
-if rec_args.Q > 1
-    Ss = cell(rec_args.Q,1);
-    for i = 1:rec_args.Q
-        smapi = smaps(:,:,:,i);
-        Ss{i} = Gdiag(smapi(Fs_in{1}.imask(:)),'mask',Fs_in{1}.imask);
+%% handle sensitivity maps
+if isempty(smaps)
+    fprintf('no sensitivity maps provided -> compressing data...\n');
+    rec_args.Q = 1;
+    if size(kdata,3) > 1
+        kdata = ir_mri_coil_compress(kdata,'ncoil',rec_args.Q);
     end
-    S = lpsutl.block_col(Ss,0);
-end
-
-%% create the system matrix
-fprintf('constructing full system matrix...\n');
-As_in = cell(nvol,1);
-As_out = cell(nvol,1);
-for i = 1:nvol % repeat forward encoding for each sense map
-    if rec_args.Q > 1
-        As_in{i} = lpsutl.kronI(rec_args.Q, Hs_in{i}*Fs_in{i}, par_coils) * S;
-        As_out{i} = lpsutl.kronI(rec_args.Q, Hs_out{i}*Fs_out{i}, par_coils) * S;
-    else
-        As_in{i} = Hs_in{i}*Fs_in{i};
-        As_out{i} = Hs_out{i}*Fs_out{i};
+    smaps = ones([rec_args.N*ones(1,3),1]);
+else
+    fprintf('compressing data to %d virtual coils...\n', rec_args.Q);
+    if isempty(rec_args.Q)
+        rec_args.Q = size(kdata,3); % default - use all coils
     end
-end
-if nvol == 1 % single volume
-    A_in = As_in{1};
-    A_out = As_out{1};
-else % each volume is a block in a block diagonal matrix
-    A_in = lpsutl.block_diag(As_in,par_vols);
-    A_out = lpsutl.block_diag(As_out,par_vols);
-end
-A = A_in + A_out; % sum of echo-in/out system matrices
 
-%% initialize the solution
-if rec_args.initdcf % initialize with dcf-nuFFT solution
-    fprintf('computing dcf-nufft initialization...\n');    
-    WAs_in = cell(nvol,1);
-    WAs_out = cell(nvol,1);
-    if par_vols
-        parfor i = 1:nvol % repeat forward encoding for each sense map
-            W_in = lpsutl.dcf_pipe(Fs_in{i},3,par_vols);
-            W_out = lpsutl.dcf_pipe(Fs_out{i},3,par_vols);
-            WAs_in{i} = lpsutl.kronI(rec_args.Q, W_in * Hs_in{i}*Fs_in{i}, par_coils) * S;
-            WAs_out{i} = lpsutl.kronI(rec_args.Q, W_out * Hs_out{i}*Fs_out{i}, par_coils) * S;
-        end
-    else
-        for i = 1:nvol % repeat forward encoding for each sense map
-            W_in = lpsutl.dcf_pipe(Fs_in{i},3,par_vols);
-            W_out = lpsutl.dcf_pipe(Fs_out{i},3,par_vols);
-            WAs_in{i} = lpsutl.kronI(rec_args.Q, W_in * Hs_in{i}*Fs_in{i}, par_coils) * S;
-            WAs_out{i} = lpsutl.kronI(rec_args.Q, W_out * Hs_out{i}*Fs_out{i}, par_coils) * S;
-        end
-    end
-    if nvol == 1 % single volume
-        WA_in = WAs_in{1};
-        WA_out = WAs_out{1};
-    else % each volume is a block in a block diagonal matrix
-        WA_in = lpsutl.block_diag(WWAs_in,par_vols);
-        WA_out = lpsutl.block_diag(As_out,par_vols);
-    end
-    WA = WA_in + WA_out;
-    x0 = WA' * b;
-    x0 = ir_wls_init_scale(WA,b,x0);
-else % initialize with zeros
-    fprintf('initializing solution with zeros...\n');
-    x0 = zeros(A.idim);
+    % compress the data and sensitivity maps
+    [kdata,~,Vt] = ir_mri_coil_compress(kdata,'ncoil',rec_args.Q);
+    smaps = reshape(reshape(smaps, [], size(smaps,4)) * Vt, [size(smaps,1:3), rec_args.Q]);
+
+    % resample sensitivity maps to recon size
+    smaps = lpsutl.resample3d(smaps,rec_args.N*ones(1,3));
 end
 
-%% make the regularizer (spatial roughness penalty)
-fprintf('creating regularization function...\n');
-if nvol == 1 % spatial regularizer only
-    C = sqrt(rec_args.beta) * lpsutl.finite_diff(A.idim,1:3);
-else % spatial + temporal
-    Cblocks = cell(4,1);
-    for i = 1:3 % spatial
-        Cblocks{i} = sqrt(rec_args.beta) * lpsutl.finite_diff(A.idim,i);
-    end
-    Cblocks{4} = sqrt(rec_args.beta_t) * lpsutl.finite_diff([A.idim,1],4);
-    C = lpsutl.block_col(Cblocks,0);
+%% create the forward model and initialize the solution
+fprintf('creating forward acquisition model...\n')
+if rec_args.dcf_init
+    [A,WA] = lpsutl.lps_model(ktraj_in, ktraj_out, smaps, rec_args, seq_args);
+    fprintf('initializing solution with density compensated adjoint...\n')
+    x0 = WA' * kdata;
+else % don't bother constructing WA
+    A = lpsutl.lps_model(ktraj_in, ktraj_out, smaps, rec_args, seq_args);
+    x0 = zeros([rec_args.N*ones(1,3),nvol]);
 end
 
-%% solve with CG
-fprintf('solving with CG...\n');
-% create system operator compatible with qpwls_pcg1 function
-A_pcg = fatrix2( ...
-    'idim', [prod(A.idim),1], ...
-    'odim', [prod(A.odim),1], ...
-    'forw', @(~,x) reshape(A*reshape(x,[A.idim,1]),[],1), ...
-    'back', @(~,y) reshape(A'*reshape(y,[A.odim,1]),[],1) ...
-    );
-x_star = qpwls_pcg1(x0(:), A_pcg, 1, b(:), 0, 'niter', rec_args.niter);
-img_lps = reshape(x_star,A.idim);
-
-%% save to h5 recon file
-fprintf('saving to h5 file...\n');
-fname = fullfile(basedir,fname_out);
-if exist(fname, 'file')
-    delete(fname);
-end
-lpsutl.saveh5struct(fname, real(img_lps), '/sol/real');
-lpsutl.saveh5struct(fname, imag(img_lps), '/sol/imag');
-lpsutl.saveh5struct(fname, seq_args, '/seq_args');
-lpsutl.saveh5struct(fname, rec_args, '/rec_args');
-fprintf('reconstruction completed --> saved to %s\n',fname_out);
+%% solve the recon problem with CG
+fprintf('solving recon problem with CG...\n')
+C = kronI(nvol,Reg1(ones(rec_args.N*ones(1,3)),'beta',rec_args.beta).C1);
+x_star = qpwls_pcg1(x0,A,1,kdata(:),C,'niter',rec_args.niter);
+x_star = reshape(x_star,size(x0));
