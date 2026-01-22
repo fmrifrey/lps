@@ -42,12 +42,13 @@ function [kdata,k_in,k_out,seq_args] = lps_convert_data(fname, ofile)
                 currentControl = GERecon('Archive.Next', archive);
                 if i == 1
                     [ndat,nc] = size(currentControl.Data);
-                    kdata = zeros(ndat, nc, seq_args.nint, seq_args.nprj, seq_args.nrep);
+                    ndat = ndat/seq_args.necho;
+                    kdata = zeros(ndat, seq_args.necho, nc, seq_args.nint, seq_args.nprj, seq_args.nrep);
                 end
                 [iint,iprj,irep] = ind2sub([seq_args.nint, seq_args.nprj, seq_args.nrep], i);
-                kdata(:,:,iint,iprj,irep) = currentControl.Data;
+                kdata(:,:,:,iint,iprj,irep) = reshape(currentControl.Data,ndat,seq_args.necho,nc);
             end
-            kdata = permute(kdata,[1,3:5,2]); % n x nint x nprj x nrep x nc
+            kdata = permute(kdata,[1,2,4:6,3]); % n x necho x nint x nprj x nrep x nc
         
         case '.dat' % SIEMENS Twix
             twix = mapVBVD(fname);
@@ -56,26 +57,23 @@ function [kdata,k_in,k_out,seq_args] = lps_convert_data(fname, ofile)
             nc = size(kdata,2); % number of coils
             kdata = permute(kdata(:,:,seq_args.pislquant+1:end),[1,3,2]);
             kdata = reshape(kdata, ... % n x nint x nprj x nrep x nc
-                ndat, seq_args.nint, seq_args.nprj, seq_args.nrep, nc);
+                ndat, seq_args.necho, seq_args.nint, seq_args.nprj, seq_args.nrep, nc);
 
         otherwise
             error('invalid file extension: %s', ext)
     end
 
     % generate kspace trajectory
-    [~,~,~,k_in0,k_out0] = lpsutl.gen_lps_waveforms( ...
+    [~,~,~,~,k_in0,k_out0] = lpsutl.gen_lps_waveforms( ...
         'sys', seq_args.sys, ... % pulseq mr system object
         'fov', seq_args.fov, ... % fov (cm)
         'N', seq_args.N_nom, ... % nominal matrix size
         'nspokes', seq_args.nspokes, ... % number of lps spokes
         't_seg', seq_args.t_seg, ... % number of samples/segment
         't_rf', seq_args.t_rf, ... % number of samples/rf pulse
+        'satellite', seq_args.satellite, ... % option to use satellite trajectories
         'fa', seq_args.fa ... % rf flip angle (deg)
         );
-
-    % convert to 3D
-    k_in0 = padarray(k_in0,[0,1],0,'post');
-    k_out0 = padarray(k_out0,[0,1],0,'post');
     
     % rotate the kspace trajectory & excitation grads
     k_in = zeros(ndat,3,seq_args.nint,seq_args.nprj);
@@ -89,9 +87,9 @@ function [kdata,k_in,k_out,seq_args] = lps_convert_data(fname, ofile)
     end
 
     % repeat for repetitions
-    k_in = repmat(k_in,[1,1,1,1,seq_args.nrep]); % [n x 3 x nint x iprj x nrep]
+    k_in = repmat(k_in,[1,1,1,1,seq_args.nrep]); % [n*necho x 3 x nint x iprj x nrep]
     k_out = repmat(k_out,[1,1,1,1,seq_args.nrep]);
-    k_in = permute(k_in,[1,3:5,2]); % [n x nint x nprj x nrep x 3]
+    k_in = permute(k_in,[1,3:5,2]); % [n*necho x nint x nprj x nrep x 3]
     k_out = permute(k_out,[1,3:5,2]);
 
     % save h5 file
