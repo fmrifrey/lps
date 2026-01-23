@@ -53,6 +53,7 @@ function lps_write_seq(varargin)
     arg = vararg_pair(arg,varargin);
     
     % initialize sequence object
+    arg.sys.rfDeadTime = 0; % to start rf pulse at t=0 in fID block
     seq = mr.Sequence(arg.sys);
     warning('OFF', 'mr:restoreShape');
 
@@ -145,7 +146,12 @@ function lps_write_seq(varargin)
         'system', arg.sys);
 
     % create TR delay
-    delay_time = arg.sys.blockDurationRaster*ceil((arg.tr*1e-3 - arg.sys.gradRasterTime*size(g_wav,1))/arg.sys.blockDurationRaster);
+    delay_time = arg.tr*1e-3;
+    delay_time = delay_time - mr.calcDuration(gx_ramp_up);
+    delay_time = delay_time - mr.calcDuration(gx_fid);
+    delay_time = delay_time - mr.calcDuration(gx_gre);
+    delay_time = delay_time - mr.calcDuration(gx_ramp_down);
+    delay_time = arg.sys.blockDurationRaster*ceil(delay_time/arg.sys.blockDurationRaster);
     tr_delay = mr.makeDelay(delay_time);
     
     % define sequence blocks
