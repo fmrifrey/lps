@@ -4,17 +4,17 @@
 rec_args.fname = './raw_data.h5'; % input raw data .h5 file name (see lps_convert_data.m)
 rec_args.fname_smaps = './smaps.h5'; % smaps input file name
 rec_args.Q = 4; % number of compressed coils to use
-rec_args.N = 64; % recon image size
+rec_args.N = 48; % recon image size
 rec_args.echos2use = []; % indices of echoes to include (empty = all)
 rec_args.ints2use = []; % indices of interleaves to include (empty = all)
-rec_args.prjs2use = 1:128; % indices of projections to include (empty = all)
+rec_args.prjs2use = []; % indices of projections to include (empty = all)
 rec_args.reps2use = []; % indices of repetitions to include (empty = all)
-rec_args.P = 128; % number of projections to use per frame (empty = nint*nprj)
-rec_args.niter = 1; % number of CG iterations
+rec_args.P = []; % number of projections to use per frame (empty = nint*nprj)
+rec_args.niter = 30; % number of CG iterations
 rec_args.dcf_init = true; % option to initialize solution with density compensated NUFFT
 rec_args.use_parfor = true; % option to use parfor loop in frame/coil-wise NUFFTs
-rec_args.fermi_cutoff = 0.5; % fermi voxel basis function cutoff (frac of nominal resolution)
-rec_args.fermi_rolloff = 0.2; % fermi voxel basis function rolloff (frac of nominal resolution)
+rec_args.fermi_cutoff = 0.3; % fermi voxel basis function cutoff (frac of nominal resolution)
+rec_args.fermi_rolloff = 0.1; % fermi voxel basis function rolloff (frac of nominal resolution)
 rec_args.beta = 2^14; % quadratic roughness penalty regularization parameter
 rec_args.debug = 0; % debug mode
 
@@ -65,7 +65,8 @@ nvol = max(floor(Ptotal / rec_args.P),1);
 Ptotal = nvol*rec_args.P;
 ktraj_in = reshape(ktraj_in(:,1:Ptotal,:),[],nvol,3);
 ktraj_out = reshape(ktraj_out(:,1:Ptotal,:),[],nvol,3);
-kdata = reshape(kdata(:,:,1:Ptotal,:),[],necho,nvol,ncoil);
+kdata = reshape(kdata(:,:,1:Ptotal,:),[],necho,rec_args.P,nvol,ncoil);
+kdata = reshape(permute(kdata,[1,3,2,4,5]),[],necho,nvol,ncoil);
 
 %% handle sensitivity maps
 if isempty(smaps)
