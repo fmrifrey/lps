@@ -38,8 +38,8 @@ function [A,WA] = lps_model(ktraj_in, ktraj_out, ...
     % set up volume-wise nufft operators
     Fs_in = cell(nvol,1);
     Fs_out = cell(nvol,1);
-    w_in = zeros(length(kmsk_in),nvol);
-    w_out = zeros(length(kmsk_out),nvol);
+    w_in = zeros(sum(1*kmsk_in),nvol);
+    w_out = zeros(sum(1*kmsk_out),nvol);
     nufft_args = {rec_args.N*ones(1,3), 6*ones(1,3), 2*rec_args.N*ones(1,3), ...
         rec_args.N/2*ones(1,3), 'table', 2^10, 'minmax:kb'};
     for ivol = 1:nvol % loop through volumes and assemble nufft object for current vol
