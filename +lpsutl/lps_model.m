@@ -29,18 +29,24 @@ function [A,WA] = lps_model(ktraj_in, ktraj_out, ...
         linspace(-1,1,N));
     msk = (Xgrd.^2 + Ygrd.^2 + Zgrd.^2) <= 1;
 
+    % create k-space masks
+    kmsk_in = 2*seq_args.fov/rec_args.N * vecnorm(reshape(ktraj_in(:,1,:),[],3),2,2) ...
+        <= min(1, seq_args.N_nom/rec_args.N * (2*rec_args.fermi_cutoff + rec_args.fermi_rolloff));
+    kmsk_out = 2*seq_args.fov/rec_args.N * vecnorm(reshape(ktraj_out(:,1,:),[],3),2,2) ...
+        <= min(1, seq_args.N_nom/rec_args.N * (2*rec_args.fermi_cutoff + rec_args.fermi_rolloff));
+
     % set up volume-wise nufft operators
     Fs_in = cell(nvol,1);
     Fs_out = cell(nvol,1);
-    w_in = zeros(M,nvol);
-    w_out = zeros(M,nvol);
+    w_in = zeros(length(kmsk_in),nvol);
+    w_out = zeros(length(kmsk_out),nvol);
     nufft_args = {rec_args.N*ones(1,3), 6*ones(1,3), 2*rec_args.N*ones(1,3), ...
         rec_args.N/2*ones(1,3), 'table', 2^10, 'minmax:kb'};
     for ivol = 1:nvol % loop through volumes and assemble nufft object for current vol
         omegav_in = 2*pi*seq_args.fov/rec_args.N * ...
-            reshape(ktraj_in(:,ivol,:),[],3);
+            reshape(ktraj_in(kmsk_in,ivol,:),[],3);
         omegav_out = 2*pi*seq_args.fov/rec_args.N * ...
-            reshape(ktraj_out(:,ivol,:),[],3);
+            reshape(ktraj_out(kmsk_out,ivol,:),[],3);
         Fs_in{ivol} = Gnufft(msk, [omegav_in, nufft_args]);
         Fs_out{ivol} = Gnufft(msk, [omegav_out, nufft_args]);
         if nargout > 1 % compute density compensation
@@ -62,26 +68,16 @@ function [A,WA] = lps_model(ktraj_in, ktraj_out, ...
         if rec_args.use_parfor
             parfor i = 1:necho*Q*nvol
                 [e,v,q] = ind2sub([necho,nvol,Q],i);
-                Sx_evq = smaps(:,:,:,q) .* x(:,:,:,e,v);
-                if use_dcf % density compensated
-                    y(:,i) = w_in(:,v) .* ferm_omega(Fs_in{v}.arg.arg{1}) .* (Fs_in{v}*Sx_evq) + ...
-                        w_out(:,v) .* ferm_omega(Fs_out{v}.arg.arg{1}) .* (Fs_out{v}*Sx_evq);
-                else
-                    y(:,i) = ferm_omega(Fs_in{v}.arg.arg{1}) .* (Fs_in{v}*Sx_evq) + ...
-                        ferm_omega(Fs_out{v}.arg.arg{1}) .* (Fs_out{v}*Sx_evq);
-                end
+                y(:,i) = Ai_fwd(x(:,:,:,e,v), smaps(:,:,:,q), ...
+                    Fs_in{v}, Fs_out{v}, w_in(:,v), w_out(:,v), ...
+                    kmsk_in, kmsk_out, ferm_omega, use_dcf);
             end
         else
             for i = 1:necho*Q*nvol
                 [e,v,q] = ind2sub([necho,nvol,Q],i);
-                Sx_evq = smaps(:,:,:,q) .* x(:,:,:,e,v);
-                if use_dcf % density compensated
-                    y(:,i) = w_in(:,v) .* ferm_omega(Fs_in{v}.arg.arg{1}) .* (Fs_in{v}*Sx_evq) + ...
-                        w_out(:,v) .* ferm_omega(Fs_out{v}.arg.arg{1}) .* (Fs_out{v}*Sx_evq);
-                else
-                    y(:,i) = ferm_omega(Fs_in{v}.arg.arg{1}) .* (Fs_in{v}*Sx_evq) + ...
-                        ferm_omega(Fs_out{v}.arg.arg{1}) .* (Fs_out{v}*Sx_evq);
-                end
+                y(:,i) = Ai_fwd(x(:,:,:,e,v), smaps(:,:,:,q), ...
+                    Fs_in{v}, Fs_out{v}, w_in(:,v), w_out(:,v), ...
+                    kmsk_in, kmsk_out, ferm_omega, use_dcf);
             end
         end
         y = reshape(y,M,necho,nvol,Q);
@@ -97,34 +93,16 @@ function [A,WA] = lps_model(ktraj_in, ktraj_out, ...
         if rec_args.use_parfor
             parfor i = 1:necho*Q*nvol
                 [e,v,q] = ind2sub([necho,nvol,Q],i);
-                if use_dcf
-                    x_evq(:,:,:,i) = embed( ...
-                        Fs_in{v}'*(ferm_omega(Fs_in{v}.arg.arg{1}) .* (w_in(:,v) .* y(:,e,v,q))) + ...
-                        Fs_out{v}'*(ferm_omega(Fs_out{v}.arg.arg{1}) .* (w_out(:,v) .* y(:,e,v,q))), ...
-                        msk);
-                else
-                    x_evq(:,:,:,i) = embed( ...
-                        Fs_in{v}'*(ferm_omega(Fs_in{v}.arg.arg{1}) .* y(:,e,v,q)) + ...
-                        Fs_out{v}'*(ferm_omega(Fs_out{v}.arg.arg{1}) .* y(:,e,v,q)), ...
-                        msk);
-                end
-                x_evq(:,:,:,i) = conj(smaps(:,:,:,q)) .* x_evq(:,:,:,i);
+                x_evq(:,:,:,i) = Ai_adj(y(:,e,v,q), smaps(:,:,:,q), ...
+                    Fs_in{v}, Fs_out{v}, w_in(:,v), w_out(:,v), ...
+                    kmsk_in, kmsk_out, ferm_omega, use_dcf);
             end
         else
             for i = 1:necho*Q*nvol
                 [e,v,q] = ind2sub([necho,nvol,Q],i);
-                if use_dcf
-                    x_evq(:,:,:,i) = embed( ...
-                        Fs_in{v}'*(ferm_omega(Fs_in{v}.arg.arg{1}) .* (w_in(:,v) .* y(:,e,v,q))) + ...
-                        Fs_out{v}'*(ferm_omega(Fs_out{v}.arg.arg{1}) .* (w_out(:,v) .* y(:,e,v,q))), ...
-                        msk);
-                else
-                    x_evq(:,:,:,i) = embed( ...
-                        Fs_in{v}'*(ferm_omega(Fs_in{v}.arg.arg{1}) .* y(:,e,v,q)) + ...
-                        Fs_out{v}'*(ferm_omega(Fs_out{v}.arg.arg{1}) .* y(:,e,v,q)), ...
-                        msk);
-                end
-                x_evq(:,:,:,i) = conj(smaps(:,:,:,q)) .* x_evq(:,:,:,i);
+                x_evq(:,:,:,i) = Ai_adj(y(:,e,v,q), smaps(:,:,:,q), ...
+                    Fs_in{v}, Fs_out{v}, w_in(:,v), w_out(:,v), ...
+                    kmsk_in, kmsk_out, ferm_omega, use_dcf);
             end
         end
         x_evq = reshape(x_evq,[N*ones(1,3),necho,nvol,Q]);
@@ -149,5 +127,60 @@ function [A,WA] = lps_model(ktraj_in, ktraj_out, ...
         'forw', @(~,x) A_fwd(x,true), ...
         'back', @(~,y) A_adj(y,true) ...
         );
+
+end
+
+% create foward operation for a SINGLE VOLUME/COIL/ECHO
+function y = Ai_fwd(x, smap, F_in, F_out, w_in, w_out, ...
+    kmsk_in, kmsk_out, ferm_omega, use_dcf)
+
+    % multiply by sense map
+    x = smap .* x;
+    
+    % forward NUFFT
+    y_in = F_in * x;
+    y_out = F_out * x;
+
+    % weigh by fermi filter
+    y_in = ferm_omega(F_in.arg.arg{1}) .* y_in;
+    y_out = ferm_omega(F_out.arg.arg{1}) .* y_out;
+
+    % weigh by density compensation
+    if use_dcf
+        y_in = w_in .* y_in;
+        y_out = w_out .* y_out;
+    end
+
+    % embed into k-space mask
+    y = embed(y_in, kmsk_in) + embed(y_out, kmsk_out);
+
+end
+
+% create adjoint operation for a SINGLE VOLUME/COIL/ECHO
+function x = Ai_adj(y, smap, F_in, F_out, w_in, w_out, ...
+    kmsk_in, kmsk_out, ferm_omega, use_dcf)
+
+    % get msk-indexed data
+    y_in = y(kmsk_in);
+    y_out = y(kmsk_out);
+
+    % weigh by dcf
+    if use_dcf
+        y_in = w_in .* y_in;
+        y_out = w_out .* y_out;
+    end
+
+    % weigh by fermi function
+    y_in = ferm_omega(F_in.arg.arg{1}) .* y_in;
+    y_out = ferm_omega(F_out.arg.arg{1}) .* y_out;
+
+    % adjoint NUFFT
+    x = F_in' * y_in + F_out' * y_out;
+    
+    % embed into image mask
+    x = embed(x, F_in.arg.mask);
+    
+    % multiply by conjugated coil map
+    x = conj(smap) .* x;
 
 end

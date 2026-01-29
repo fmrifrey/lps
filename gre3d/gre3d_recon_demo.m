@@ -1,34 +1,28 @@
-%% set arguments
-basedir = './'; % directory containing data
-fname_kdata = 'raw_data.h5'; % name of input .h5 file (in basedir)
-fname_smaps = 'smaps.h5'; % name of input (or output) smaps .h5 file
-fname_out = sprintf('recon_%s.h5',...
-    string(datetime('now','Format','yyyyMMddHHmm'))); % name of output recon .h5 file (in basedir)
-
-% set recon parameters
-rec_args.estimate_smap = 1; % option to estimate sensitivity maps from ACS data
-rec_args.Q = 8; % number of coils to compress to
+%% GRE3D recon + sensitivity map estimation demo script
+% by David Frey
+%% set parameters
+rec_args.fname = './raw_data.h5'; % input raw data .h5 file name (see gre3d_convert_data.m)
+rec_args.fname_smaps = '../smaps.h5'; % smaps input file name
+rec_args.estimate_smap = true; % option to estimate sensitivity maps from ACS data
+rec_args.Q = 8; % number of coils to compress to for recon
 rec_args.niter = 30; % number of iterations for CG
 rec_args.beta = 0.5; % regularization parameter (spatial roughness)
 
-%% load gre3d data from g5 file
+%% load gre3d data from h5 file
 fprintf('loading raw data...\n');
-str = lpsutl.loadh5struct(fullfile(basedir,fname_kdata));
-kdata = str.kdata.real + 1i*str.kdata.imag;
-msk = str.msk > 0;
-seq_args = str.seq_args;
+kdata = lpsutl.loadh5struct(rec_args.fname,'/kdata').real + ...
+    1i*lpsutl.loadh5struct(rec_args.fname,'/kdata').imag; % raw kspace data
+seq_args = lpsutl.loadh5struct(rec_args.fname,'/seq_args'); % sequence arguments
+msk = lpsutl.loadh5struct(rec_args.fname).msk; % sampling mask
+if isfile(rec_args.fname_smaps)
+    smaps = lpsutl.loadh5struct(rec_args.fname_smaps).real + ...
+        1i*lpsutl.loadh5struct(rec_args.fname_smaps).imag; % sensitivity maps
+else
+    smaps = []; % leave empty if no sensitity map file provided
+end
 
-%% set up Fourier encoding operator
-fprintf('setting up fft...\n');
-F = fatrix2('idim', seq_args.N*ones(1,3), ...
-    'odim', seq_args.N*ones(1,3), ...
-    'omask', msk, ...
-    'forw', @(~,x)lpsutl.fftc(x,[],1:3), ...
-    'back', @(~,x)lpsutl.ifftc(x,[],1:3) ...
-    );
-
-%% load or estimate sense maps
-if rec_args.estimate_smap
+%% estimate sense maps
+if isempty(smaps) && rec_args.estimate_smap
 
     fprintf('estimating sensitivity maps...\n');
     
@@ -41,63 +35,44 @@ if rec_args.estimate_smap
     acs_data = kdata(acs_idcs,acs_idcs,acs_idcs,:);
 
     % estimate sensitivity maps from ACS data
-    smaps = mri_sensemap_denoise(lpsutl.ifftc(acs_data,[],1:3)); % MIRT method - CG
-    % smaps = bart('ecalib -b0 -m1', acs_data) % BART method - eSPIRIT (recommended)
+    smaps = PISCO_sensitivity_map_estimation(acs_data, seq_args.N*ones(1,3));
 
     % save the sensitivity maps
-    lpsutl.saveh5struct(fname_smaps,real(smaps),'/real');
-    lpsutl.saveh5struct(fname_smaps,real(smaps),'/imag');
+    lpsutl.saveh5struct(rec_args.fname_smaps,real(smaps),'/real');
+    lpsutl.saveh5struct(rec_args.fname_smaps,imag(smaps),'/imag');
 
+end
+
+%% coil compression
+if isempty(smaps)
+    fprintf('no sensitivity maps provided -> compressing data...\n');
+    rec_args.Q = 1;
+    if ncoil > 1
+        kdata = ir_mri_coil_compress(kdata,'ncoil',rec_args.Q);
+    end
+    smaps = ones([rec_args.N*ones(1,3),1]);
 else
+    fprintf('compressing data to %d virtual coils...\n', rec_args.Q);
+    if isempty(rec_args.Q)
+        rec_args.Q = size(kdata,4); % default - use all coils
+    end
 
-    fprintf('loading sensitivity maps...\n');
+    % compress the data and sensitivity maps
+    [kdata,~,Vt] = ir_mri_coil_compress(kdata,'ncoil',rec_args.Q);
+    smaps = reshape(reshape(smaps, [], size(smaps,4)) * Vt, [size(smaps,1:3), rec_args.Q]);
 
-    % load the sensitivity maps
-    s = lpsutl.loadh5struct(fname_smaps);
-    smaps = s.real + 1i*s.imag;
-
+    % resample sensitivity maps to recon size
+    smaps = lpsutl.resample3d(smaps,seq_args.N*ones(1,3));
 end
 
-% upsample smaps
-smaps = lpsutl.resample3d(smaps,seq_args.N*ones(1,3));
-
-%% perform coil compression and create SENSE operator
-fprintf('coil compressing data...\n');
-[kdata,~,Vr] = ir_mri_coil_compress(kdata,'ncoil',rec_args.Q);
-smaps = reshape(reshape(smaps,[],size(smaps,4))*Vr,[seq_args.N*ones(1,3),rec_args.Q]);
-
-fprintf('constructing SENSE operator...\n');
-Ss = cell(rec_args.Q,1);
-for i = 1:rec_args.Q
-    smapi = smaps(:,:,:,i);
-    Ss{i} = Gdiag(smapi);
-end
-S = lpsutl.block_col(Ss,0);
-
-%% create the system matrix and regularization function
-A = lpsutl.kronI(rec_args.Q,F,0)*S;
-C = sqrt(rec_args.beta) * lpsutl.finite_diff(A.idim,1:3);
-x0 = zeros(seq_args.N*ones(1,3));
+%% set up forward model
+fprintf('setting up forward model...\n');
+A = fatrix2('idim', seq_args.N*ones(1,3), ...
+    'odim', [seq_args.N*ones(1,3),rec_args.Q], ...
+    'forw', @(~,x) msk .* lpsutl.fftc(smaps .* x, 1:3), ...
+    'back', @(~,y) numel(y)*sum(conj(smaps) .* lpsutl.ifftc(msk .* y, 1:3), 4) ...
+    );
 
 %% solve with CG
-fprintf('solving with CG...\n');
-A_pcg = fatrix2( ...
-    'idim', [prod(A.idim),1], ...
-    'odim', [prod(A.odim),1], ...
-    'forw', @(~,x) reshape(A*reshape(x,A.idim),[],1), ...
-    'back', @(~,y) reshape(A'*reshape(y,A.odim),[],1) ...
-    );
-x_star = qpwls_pcg1(x0(:), A_pcg, 1, kdata(:), C, 'niter', rec_args.niter);
-img_gre3d = reshape(x_star,A.idim);
-
-%% save to h5 recon file
-fprintf('saving to h5 file...\n');
-fname = fullfile(basedir,fname_out);
-if exist(fname, 'file')
-    delete(fname);
-end
-lpsutl.saveh5struct(fname, real(img_gre3d), '/sol/real');
-lpsutl.saveh5struct(fname, imag(img_gre3d), '/sol/imag');
-lpsutl.saveh5struct(fname, seq_args, '/seq_args');
-lpsutl.saveh5struct(fname, rec_args, '/rec_args');
-fprintf('reconstruction completed --> saved to %s\n',fname_out);
+x0 = zeros(seq_args.N*ones(1,3));
+x_star = qpwls_pcg1(x0, A, 1, kdata(:), 0, 'niter', rec_args.niter, 'stop_grad_tol', 1);

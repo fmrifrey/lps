@@ -46,3 +46,10 @@ else
     addpath(orchestraPath);
     fprintf('done.\n');
 end
+
+%% PISCO (for estimating sensitivity maps)
+fprintf('updating PISCO... ')
+system('[ -d "./PISCO" ] && rm -rf ./PISCO');
+system('git clone git@github.com:ralobos/PISCO.git 2> /dev/null');
+addpath PISCO
+fprintf('done.\n')

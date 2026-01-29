@@ -2,9 +2,9 @@
 % by David Frey
 %% set parameters
 rec_args.fname = './raw_data.h5'; % input raw data .h5 file name (see lps_convert_data.m)
-rec_args.fname_smaps = './smaps.h5'; % smaps input file name
+rec_args.fname_smaps = '../smaps.h5'; % smaps input file name
 rec_args.Q = 4; % number of compressed coils to use
-rec_args.N = 48; % recon image size
+rec_args.N = 80; % recon image size
 rec_args.echos2use = []; % indices of echoes to include (empty = all)
 rec_args.ints2use = []; % indices of interleaves to include (empty = all)
 rec_args.prjs2use = []; % indices of projections to include (empty = all)
@@ -13,9 +13,9 @@ rec_args.P = []; % number of projections to use per frame (empty = nint*nprj)
 rec_args.niter = 30; % number of CG iterations
 rec_args.dcf_init = true; % option to initialize solution with density compensated NUFFT
 rec_args.use_parfor = true; % option to use parfor loop in frame/coil-wise NUFFTs
-rec_args.fermi_cutoff = 0.3; % fermi voxel basis function cutoff (frac of nominal resolution)
+rec_args.fermi_cutoff = 0.45; % fermi voxel basis function cutoff (frac of nominal resolution)
 rec_args.fermi_rolloff = 0.1; % fermi voxel basis function rolloff (frac of nominal resolution)
-rec_args.beta = 2^14; % quadratic roughness penalty regularization parameter
+rec_args.beta = 0; % quadratic roughness penalty regularization parameter
 rec_args.debug = 0; % debug mode
 
 %% load in data
@@ -28,7 +28,6 @@ seq_args = lpsutl.loadh5struct(rec_args.fname,'/seq_args'); % sequence arguments
 ktraj_in = lpsutl.loadh5struct(rec_args.fname,'/ktraj').spoke_in; % spoke-in kspace trajectory
 ktraj_out = lpsutl.loadh5struct(rec_args.fname,'/ktraj').spoke_out; % spoke-out kspace trajectory
 if isfile(rec_args.fname_smaps)
-    rec_args.fname_smaps = which(rec_args.fname_smaps);
     smaps = lpsutl.loadh5struct(rec_args.fname_smaps).real + ...
         1i*lpsutl.loadh5struct(rec_args.fname_smaps).imag; % sensitivity maps
 else
@@ -103,6 +102,12 @@ end
 
 %% solve the recon problem with CG
 fprintf('solving recon problem with CG...\n')
-% C = kronI(nvol,kronI(necho,Reg1(ones(rec_args.N*ones(1,3)),'beta',rec_args.beta).C1));
-x_star = qpwls_pcg1(x0,A,1,kdata(:),0,'niter',rec_args.niter);
+C = Reg1(ones(rec_args.N*ones(1,3)),'beta',rec_args.beta).C1;
+if necho > 1 || nvol > 1
+    C = kronI(necho,C);
+    if nvol > 1
+        C = kronI(nvol,C);
+    end
+end
+x_star = qpwls_pcg1(x0,A,1,kdata(:),C,'niter',rec_args.niter);
 x_star = reshape(x_star,size(x0));
