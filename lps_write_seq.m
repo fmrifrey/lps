@@ -41,6 +41,7 @@ function lps_write_seq(varargin)
     arg.psd_rf_wait = 100e-6; % RF–gradient delay (s), GE scanner-specific
     arg.psd_grd_wait = 100e-6;   % ADC–gradient delay (s), scanner-specific
     arg.coil = 'xrm'; % GE coil model
+    arg.dwell = 4; % ADC sample rate (us)
     arg.t_seg = 1120; % time/segment (us)
     arg.t_rf = 16; % time/rf pulse (us)
     arg.fa = 4; % rf flip angle (deg)
@@ -60,6 +61,7 @@ function lps_write_seq(varargin)
     [g_wav,g0,rf_wav,t_ramp] = lpsutl.gen_lps_waveforms( ...
         'sys', arg.sys, ... % pulseq mr system structure
         'fov', arg.fov, ... % fov (cm)
+        'dwell', arg.dwell, ... % adc dwell time (us)
         'N', arg.N_nom, ... % nominal matrix size
         'nspokes', arg.nspokes, ... % number of lps spokes
         't_seg', arg.t_seg, ... % time/segment
@@ -115,12 +117,10 @@ function lps_write_seq(varargin)
         'system', arg.sys);
 
     % create ADC
-    nseg = round(arg.t_seg*1e-6/arg.sys.adcRasterTime);
-    acq_len = arg.sys.adcSamplesDivisor*ceil(arg.nspokes*nseg*arg.necho ...
-        /arg.sys.adcSamplesDivisor);
-    adc = mr.makeAdc(acq_len, ...
-        'Duration', arg.sys.adcRasterTime*acq_len, ...
-        'system', arg.sys);
+    nseg = round(arg.t_seg/arg.dwell);
+    acq_len = arg.sys.adcSamplesDivisor * ceil(arg.nspokes*nseg*arg.necho / ...
+        arg.sys.adcSamplesDivisor);
+    adc = mr.makeAdc(acq_len, 'system', arg.sys, 'dwell', arg.dwell*1e-6);
 
     % create TR delay
     delay_time = arg.tr*1e-3;

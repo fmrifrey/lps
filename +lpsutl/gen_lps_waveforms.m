@@ -5,6 +5,7 @@ function [g,g0,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
 %
 % inputs:
 % sys - pulseq mr system structure
+% dwell - adc dwell time
 % fov - field of view (cm)
 % N - nominal 3D matrix size
 % nspokes - number of spokes (or rf subpulses)
@@ -24,6 +25,7 @@ function [g,g0,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
 
     % define default arguments
     arg.sys = mr.opts; % system structure
+    arg.dwell = 4; % ADC sample rate (us)
     arg.fov = 20; % fov (cm)
     arg.N = 128; % nominal matrix size
     arg.nspokes = 23; % number of lps spokes
@@ -38,7 +40,7 @@ function [g,g0,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
 
     % check that segment/rf widths are valid with given raster time
     dt_g = arg.sys.gradRasterTime*1e6; % (us)
-    dt_adc = arg.sys.adcRasterTime*1e6; % (us)
+    dt_adc = arg.dwell; % (us)
     dt_rf = arg.sys.rfRasterTime*1e6; % (us)
     if mod(arg.t_seg,dt_g) > 0 || mod(arg.t_seg,dt_rf) > 0
         error('tseg must be divisible by rf & gradient raster times');
