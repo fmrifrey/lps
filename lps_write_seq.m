@@ -36,7 +36,7 @@ function lps_write_seq(varargin)
     arg.nrep = 1; % number of rotation sequence repetitions
     arg.nint = 1; % number of interleaves (2D in-plane rotations)
     arg.nprj = 16; % number of projections (3D thru-plane rotations)
-    arg.necho = 1; % number of gradient-recalled echoes to acquire
+    arg.nechoes = 1; % number of echoes to acquire (GREs only, no FID)
     arg.nspokes = 23; % number of lps spokes
     arg.psd_rf_wait = 100e-6; % RF–gradient delay (s), GE scanner-specific
     arg.psd_grd_wait = 100e-6;   % ADC–gradient delay (s), scanner-specific
@@ -45,7 +45,7 @@ function lps_write_seq(varargin)
     arg.t_seg = 1120; % time/segment (us)
     arg.t_rf = 16; % time/rf pulse (us)
     arg.fa = 4; % rf flip angle (deg)
-    arg.satellite = true; % option to use satellite trajectory
+    arg.C = [0, 0, 0; 1, 0, 0; 0, 1, 0]; % fourier basis coefficient matrix
     arg.plotseq = false; % option to plot the sequence
     arg.pislquant = 1; % number of TRs to use for prescan
     arg.writepge = true; % option to convert seq to pge file
@@ -64,45 +64,53 @@ function lps_write_seq(varargin)
         'dwell', arg.dwell, ... % adc dwell time (us)
         'N', arg.N_nom, ... % nominal matrix size
         'nspokes', arg.nspokes, ... % number of lps spokes
+        'nechoes', arg.nechoes, ... % number of echoes
+        'C', arg.C, ... % fourier coefficient matrix
         't_seg', arg.t_seg, ... % time/segment
         't_rf', arg.t_rf, ... % rf pulse width
-        'satellite', arg.satellite, ... % option to use satellite
         'fa', arg.fa ... % rf flip angle (deg)
         );
+    g_wav = reshape(g_wav, [], arg.nechoes+1, 3);
 
     % create gradient ramp waveform
     nramp = ceil(t_ramp/arg.sys.gradRasterTime);
     ramp_up = 1/nramp * ((0:nramp - 1).' + 0.5);
     
     % create gradient waveform objects for fID portion
-    g_wav_fid = [ramp_up.*g0(:)'; g_wav];
+    g_wav_fid = [ramp_up.*g0(1,:); squeeze(g_wav(:,1,:))];
     gx_fid = mr.makeArbitraryGrad('x', 0.99*g_wav_fid(:,1).', ...
         'system', arg.sys, ...
         'first', 0, ...
-        'last', 0.99*g0(1));
+        'last', 0.99*g0(2,1));
     gy_fid = mr.makeArbitraryGrad('y', 0.99*g_wav_fid(:,2).', ...
         'system', arg.sys, ...
         'first', 0, ...
-        'last', 0.99*g0(2));
+        'last', 0.99*g0(2,2));
     gz_fid = mr.makeArbitraryGrad('z', 0.99*g_wav_fid(:,3).', ...
         'system', arg.sys, ...
         'first', 0, ...
-        'last', 0.99*g0(3));
+        'last', 0.99*g0(2,3));
 
     % create gradient waveform objects for GRE portion
-    g_wav_gre = [repmat(g_wav, [arg.necho,1]); (1-ramp_up).*g0(:)'];
+    g_wav_gre = [reshape(g_wav(:,2:end,:),[],3); (1-ramp_up).*g0(end,:)];
     gx_gre = mr.makeArbitraryGrad('x', 0.99*g_wav_gre(:,1).', ...
         'system', arg.sys, ...
-        'first', 0.99*g0(1), ...
+        'first', 0.99*g0(2,1), ...
         'last', 0);
     gy_gre = mr.makeArbitraryGrad('y', 0.99*g_wav_gre(:,2).', ...
         'system', arg.sys, ...
-        'first', 0.99*g0(2), ...
+        'first', 0.99*g0(2,2), ...
         'last', 0);
     gz_gre = mr.makeArbitraryGrad('z', 0.99*g_wav_gre(:,3).', ...
         'system', arg.sys, ...
-        'first', 0.99*g0(3), ...
+        'first', 0.99*g0(2,3), ...
         'last', 0);
+
+    % only include non-zero gradients in gradient object cell array
+    grads_fid = {gx_fid, gy_fid, gz_fid};
+    grads_gre = {gx_gre, gy_gre, gz_gre};
+    grads_fid = grads_fid(cellfun(@(g) max(abs(g.waveform)) > 0, grads_fid));
+    grads_gre = grads_gre(cellfun(@(g) max(abs(g.waveform)) > 0, grads_gre));
 
     % create rf waveform
     rf_delay = t_ramp - arg.t_rf*1e-6/2;
@@ -118,7 +126,7 @@ function lps_write_seq(varargin)
 
     % create ADC
     nseg = round(arg.t_seg/arg.dwell);
-    acq_len = arg.sys.adcSamplesDivisor * ceil(arg.nspokes*nseg*arg.necho / ...
+    acq_len = arg.sys.adcSamplesDivisor * ceil(arg.nspokes*nseg*arg.nechoes / ...
         arg.sys.adcSamplesDivisor);
     adc = mr.makeAdc(acq_len, 'system', arg.sys, 'dwell', arg.dwell*1e-6);
 
@@ -145,36 +153,24 @@ function lps_write_seq(varargin)
             R = lpsutl.rot_3dtga(i+arg.dummyshots+arg.pislquant+1, 1);
         end
         
+        % R = eye(3);
+        
         % make rotation object from rotation matrix
         rot = mr.makeRotation(R);
 
         % make TRID label
         lbl = mr.makeLabel('SET','TRID', 1 + isDummyTR + 2*isReceiveGainCalibrationTR);
 
-        if arg.satellite
 
-            % write fID portion to sequence
-            seq.addBlock(rf, gx_fid, gy_fid, gz_fid, rot, lbl);
-    
-            % write GRE portion to sequence
-            if isDummyTR
-                seq.addBlock(gx_gre, gy_gre, gz_gre, rot); % no adc
-            else
-                seq.addBlock(adc, gx_gre, gy_gre, gz_gre, rot);
-            end
 
-        else % don't include z gradient
+        % write fID portion to sequence
+        seq.addBlock(rf, grads_fid{:}, rot, lbl);
 
-            % write fID portion to sequence
-            seq.addBlock(rf, gx_fid, gy_fid, rot, lbl);
-
-            % write GRE portion to sequence
-            if isDummyTR
-                seq.addBlock(gx_gre, gy_gre, rot); % no adc
-            else
-                seq.addBlock(adc, gx_gre, gy_gre, rot);
-            end
-
+        % write GRE portion to sequence
+        if isDummyTR
+            seq.addBlock(grads_gre{:}, rot); % no adc
+        else
+            seq.addBlock(adc, grads_gre{:}, rot);
         end
 
         % add tr delay

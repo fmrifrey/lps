@@ -18,7 +18,7 @@ function [A,WA] = lps_model(ktraj_in, ktraj_out, ...
 
     % get sizes
     M = size(ktraj_in,1);
-    necho = length(rec_args.echos2use);
+    nechoes = length(rec_args.echoes2use);
     nvol = size(ktraj_in,2);
     N = size(smaps,1);
     Q = size(smaps,4);
@@ -64,23 +64,23 @@ function [A,WA] = lps_model(ktraj_in, ktraj_out, ...
     % create forward operation
     function y = A_fwd(x,use_dcf)
         t = tic;
-        y = zeros(M,necho*nvol*Q);
+        y = zeros(M,nechoes*nvol*Q);
         if rec_args.use_parfor
-            parfor i = 1:necho*Q*nvol
-                [e,v,q] = ind2sub([necho,nvol,Q],i);
+            parfor i = 1:nechoes*Q*nvol
+                [e,v,q] = ind2sub([nechoes,nvol,Q],i);
                 y(:,i) = Ai_fwd(x(:,:,:,e,v), smaps(:,:,:,q), ...
                     Fs_in{v}, Fs_out{v}, w_in(:,v), w_out(:,v), ...
                     kmsk_in, kmsk_out, ferm_omega, use_dcf);
             end
         else
-            for i = 1:necho*Q*nvol
-                [e,v,q] = ind2sub([necho,nvol,Q],i);
+            for i = 1:nechoes*Q*nvol
+                [e,v,q] = ind2sub([nechoes,nvol,Q],i);
                 y(:,i) = Ai_fwd(x(:,:,:,e,v), smaps(:,:,:,q), ...
                     Fs_in{v}, Fs_out{v}, w_in(:,v), w_out(:,v), ...
                     kmsk_in, kmsk_out, ferm_omega, use_dcf);
             end
         end
-        y = reshape(y,M,necho,nvol,Q);
+        y = reshape(y,M,nechoes,nvol,Q);
         if rec_args.debug > 0
             fprintf('forward op time = %.3fs\n', toc(t));
         end
@@ -89,23 +89,23 @@ function [A,WA] = lps_model(ktraj_in, ktraj_out, ...
     % create adjoint operation
     function x = A_adj(y,use_dcf)
         t = tic;
-        x_evq = zeros([N*ones(1,3),necho*nvol*Q]);
+        x_evq = zeros([N*ones(1,3),nechoes*nvol*Q]);
         if rec_args.use_parfor
-            parfor i = 1:necho*Q*nvol
-                [e,v,q] = ind2sub([necho,nvol,Q],i);
+            parfor i = 1:nechoes*Q*nvol
+                [e,v,q] = ind2sub([nechoes,nvol,Q],i);
                 x_evq(:,:,:,i) = Ai_adj(y(:,e,v,q), smaps(:,:,:,q), ...
                     Fs_in{v}, Fs_out{v}, w_in(:,v), w_out(:,v), ...
                     kmsk_in, kmsk_out, ferm_omega, use_dcf);
             end
         else
-            for i = 1:necho*Q*nvol
-                [e,v,q] = ind2sub([necho,nvol,Q],i);
+            for i = 1:nechoes*Q*nvol
+                [e,v,q] = ind2sub([nechoes,nvol,Q],i);
                 x_evq(:,:,:,i) = Ai_adj(y(:,e,v,q), smaps(:,:,:,q), ...
                     Fs_in{v}, Fs_out{v}, w_in(:,v), w_out(:,v), ...
                     kmsk_in, kmsk_out, ferm_omega, use_dcf);
             end
         end
-        x_evq = reshape(x_evq,[N*ones(1,3),necho,nvol,Q]);
+        x_evq = reshape(x_evq,[N*ones(1,3),nechoes,nvol,Q]);
         x = sum(x_evq,6); % sum over coil dimension
         if rec_args.debug > 0
             fprintf('adjoint op time = %.3fs\n', toc(t));
@@ -114,16 +114,16 @@ function [A,WA] = lps_model(ktraj_in, ktraj_out, ...
 
     % create the forward model fatrix operator
     A = fatrix2( ...
-        'idim', [N*ones(1,3),necho,nvol], ...
-        'odim', [M,necho,nvol,Q], ...
+        'idim', [N*ones(1,3),nechoes,nvol], ...
+        'odim', [M,nechoes,nvol,Q], ...
         'forw', @(~,x) A_fwd(x,false), ...
         'back', @(~,y) A_adj(y,false) ...
         );
 
     % create the forward model fatrix operator
     WA = fatrix2( ...
-        'idim', [N*ones(1,3),necho,nvol], ...
-        'odim', [M,necho,nvol,Q], ...
+        'idim', [N*ones(1,3),nechoes,nvol], ...
+        'odim', [M,nechoes,nvol,Q], ...
         'forw', @(~,x) A_fwd(x,true), ...
         'back', @(~,y) A_adj(y,true) ...
         );

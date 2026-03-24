@@ -5,7 +5,7 @@ rec_args.fname = './raw_data.h5'; % input raw data .h5 file name (see lps_conver
 rec_args.fname_smaps = '../smaps.h5'; % smaps input file name
 rec_args.Q = 4; % number of compressed coils to use
 rec_args.N = 80; % recon image size
-rec_args.echos2use = []; % indices of echoes to include (empty = all)
+rec_args.echoes2use = []; % indices of echoes to include (empty = all)
 rec_args.ints2use = []; % indices of interleaves to include (empty = all)
 rec_args.prjs2use = []; % indices of projections to include (empty = all)
 rec_args.reps2use = []; % indices of repetitions to include (empty = all)
@@ -13,9 +13,9 @@ rec_args.P = []; % number of projections to use per frame (empty = nint*nprj)
 rec_args.niter = 30; % number of CG iterations
 rec_args.dcf_init = true; % option to initialize solution with density compensated NUFFT
 rec_args.use_parfor = true; % option to use parfor loop in frame/coil-wise NUFFTs
-rec_args.fermi_cutoff = 0.45; % fermi voxel basis function cutoff (frac of nominal resolution)
+rec_args.fermi_cutoff = 0.7; % fermi voxel basis function cutoff (frac of nominal resolution)
 rec_args.fermi_rolloff = 0.1; % fermi voxel basis function rolloff (frac of nominal resolution)
-rec_args.beta = 0; % quadratic roughness penalty regularization parameter
+rec_args.beta = 2^16; % tikhonov regularization parameter
 rec_args.debug = 0; % debug mode
 
 %% load in data
@@ -36,8 +36,8 @@ end
 
 %% format the data and k-space trajectory
 fprintf('formatting data and k-space trajectories...\n');
-if isempty(rec_args.echos2use)
-    rec_args.echos2use = 1:seq_args.necho;
+if isempty(rec_args.echoes2use)
+    rec_args.echoes2use = 1:seq_args.nechoes;
 end
 if isempty(rec_args.ints2use)
     rec_args.ints2use = 1:seq_args.nint;
@@ -54,18 +54,18 @@ if isempty(rec_args.P)
 end
 
 % select out desired indices
-necho = length(rec_args.echos2use);
+nechoes = length(rec_args.echoes2use);
 ktraj_in = reshape(ktraj_in(:,rec_args.ints2use,rec_args.prjs2use,rec_args.reps2use,:),[],Ptotal,3);
 ktraj_out = reshape(ktraj_out(:,rec_args.ints2use,rec_args.prjs2use,rec_args.reps2use,:),[],Ptotal,3);
-kdata = reshape(kdata(:,rec_args.echos2use,rec_args.ints2use,rec_args.prjs2use,rec_args.reps2use,:),[],necho,Ptotal,ncoil);
+kdata = reshape(kdata(:,rec_args.echoes2use,rec_args.ints2use,rec_args.prjs2use,rec_args.reps2use,:),[],nechoes,Ptotal,ncoil);
 
 %% reformat into individual echoes/volumes
 nvol = max(floor(Ptotal / rec_args.P),1);
 Ptotal = nvol*rec_args.P;
 ktraj_in = reshape(ktraj_in(:,1:Ptotal,:),[],nvol,3);
 ktraj_out = reshape(ktraj_out(:,1:Ptotal,:),[],nvol,3);
-kdata = reshape(kdata(:,:,1:Ptotal,:),[],necho,rec_args.P,nvol,ncoil);
-kdata = reshape(permute(kdata,[1,3,2,4,5]),[],necho,nvol,ncoil);
+kdata = reshape(kdata(:,:,1:Ptotal,:),[],nechoes,rec_args.P,nvol,ncoil);
+kdata = reshape(permute(kdata,[1,3,2,4,5]),[],nechoes,nvol,ncoil);
 
 %% handle sensitivity maps
 if isempty(smaps)
@@ -94,17 +94,22 @@ fprintf('creating forward acquisition model...\n')
 if rec_args.dcf_init
     [A,WA] = lpsutl.lps_model(ktraj_in, ktraj_out, smaps, rec_args, seq_args);
     fprintf('initializing solution with density compensated adjoint...\n')
-    x0 = reshape(WA' * kdata, [rec_args.N*ones(1,3),necho,nvol]);
+    x0 = reshape(WA' * kdata, [rec_args.N*ones(1,3),nechoes,nvol]);
 else % don't bother constructing WA
     A = lpsutl.lps_model(ktraj_in, ktraj_out, smaps, rec_args, seq_args);
-    x0 = zeros([rec_args.N*ones(1,3),necho,nvol]);
+    x0 = zeros([rec_args.N*ones(1,3),nechoes,nvol]);
 end
 
 %% solve the recon problem with CG
 fprintf('solving recon problem with CG...\n')
-C = Reg1(ones(rec_args.N*ones(1,3)),'beta',rec_args.beta).C1;
-if necho > 1 || nvol > 1
-    C = kronI(necho,C);
+C = fatrix2( ... % identity operator for tikhonov regularization
+    'idim', rec_args.N*ones(1,3), ...
+    'odim', rec_args.N*ones(1,3), ...
+    'forw', @(~,x) sqrt(rec_args.beta) * x, ...
+    'back', @(~,y) sqrt(rec_args.beta) * y ...
+    );
+if nechoes > 1 || nvol > 1
+    C = kronI(nechoes,C);
     if nvol > 1
         C = kronI(nvol,C);
     end

@@ -42,11 +42,11 @@ function [kdata,k_in,k_out,seq_args] = lps_convert_data(fname, ofile)
                 currentControl = GERecon('Archive.Next', archive);
                 if i == 1
                     [ndat,nc] = size(currentControl.Data);
-                    ndat = ndat/seq_args.necho;
-                    kdata = zeros(ndat, seq_args.necho, nc, seq_args.nint, seq_args.nprj, seq_args.nrep);
+                    ndat = ndat/seq_args.nechoes;
+                    kdata = zeros(ndat, seq_args.nechoes, nc, seq_args.nint, seq_args.nprj, seq_args.nrep);
                 end
                 [iint,iprj,irep] = ind2sub([seq_args.nint, seq_args.nprj, seq_args.nrep], i);
-                kdata(:,:,:,iint,iprj,irep) = reshape(currentControl.Data,ndat,seq_args.necho,nc);
+                kdata(:,:,:,iint,iprj,irep) = reshape(currentControl.Data,ndat,seq_args.nechoes,nc);
             end
             kdata = permute(kdata,[1,2,4:6,3]); % n x necho x nint x nprj x nrep x nc
         
@@ -57,7 +57,7 @@ function [kdata,k_in,k_out,seq_args] = lps_convert_data(fname, ofile)
             nc = size(kdata,2); % number of coils
             kdata = permute(kdata(:,:,seq_args.pislquant+1:end),[1,3,2]);
             kdata = reshape(kdata, ... % n x nint x nprj x nrep x nc
-                ndat, seq_args.necho, seq_args.nint, seq_args.nprj, seq_args.nrep, nc);
+                ndat, seq_args.nechoes, seq_args.nint, seq_args.nprj, seq_args.nrep, nc);
 
         otherwise
             error('invalid file extension: %s', ext)
@@ -69,9 +69,10 @@ function [kdata,k_in,k_out,seq_args] = lps_convert_data(fname, ofile)
         'fov', seq_args.fov, ... % fov (cm)
         'N', seq_args.N_nom, ... % nominal matrix size
         'nspokes', seq_args.nspokes, ... % number of lps spokes
+        'nechoes', seq_args.nechoes, ... % number of echoes
         't_seg', seq_args.t_seg, ... % number of samples/segment
         't_rf', seq_args.t_rf, ... % number of samples/rf pulse
-        'satellite', seq_args.satellite, ... % option to use satellite trajectories
+        'C', seq_args.C, ... % option to use satellite trajectories
         'fa', seq_args.fa ... % rf flip angle (deg)
         );
     
