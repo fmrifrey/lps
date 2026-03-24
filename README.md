@@ -380,3 +380,7 @@ The problem can then be solved using gradient based methods (i.e. CG, FISTA, PGM
 
 
 ## References
+
+## Links
+
+[![Hypercommit](https://img.shields.io/badge/Hypercommit-DB2475)](https://hypercommit.com/lps)
