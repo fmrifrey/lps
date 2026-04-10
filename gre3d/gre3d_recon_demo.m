@@ -6,7 +6,7 @@ rec_args.fname_smaps = '../smaps.h5'; % smaps input file name
 rec_args.estimate_smap = true; % option to estimate sensitivity maps from ACS data
 rec_args.Q = 8; % number of coils to compress to for recon
 rec_args.niter = 30; % number of iterations for CG
-rec_args.beta = 0.5; % regularization parameter (spatial roughness)
+rec_args.beta = 0.5; % tikhonov regularization parameter
 
 %% load gre3d data from h5 file
 fprintf('loading raw data...\n');
@@ -28,9 +28,9 @@ if isempty(smaps) && rec_args.estimate_smap
     
     % get ACS data
     if mod(seq_args.Nacs,2) % odd ACS lines
-        acs_idcs = floor(seq_args.N)/2 + (-(seq_args.Nacs-1)/2:(seq_args.Nacs-1)/2);
+        acs_idcs = ceil(seq_args.N)/2 + (-(seq_args.Nacs-1)/2:(seq_args.Nacs-1)/2);
     else % even
-        acs_idcs = floor(seq_args.N)/2 + (-seq_args.Nacs/2:seq_args.Nacs/2-1);
+        acs_idcs = ceil(seq_args.N)/2 + (-seq_args.Nacs/2:seq_args.Nacs/2-1);
     end
     acs_data = kdata(acs_idcs,acs_idcs,acs_idcs,:);
 
@@ -70,9 +70,18 @@ fprintf('setting up forward model...\n');
 A = fatrix2('idim', seq_args.N*ones(1,3), ...
     'odim', [seq_args.N*ones(1,3),rec_args.Q], ...
     'forw', @(~,x) msk .* lpsutl.fftc(smaps .* x, 1:3), ...
-    'back', @(~,y) numel(y)*sum(conj(smaps) .* lpsutl.ifftc(msk .* y, 1:3), 4) ...
+    'back', @(~,y) sum(conj(smaps) .* lpsutl.ifftc(msk .* y, 1:3), 4) ...
+    );
+
+% set up identity operator for tikhonov regularization
+C = fatrix2( ...
+    'idim', seq_args.N*ones(1,3), ...
+    'odim', seq_args.N*ones(1,3), ...
+    'forw', @(~,x) sqrt(rec_args.beta) * x, ...
+    'back', @(~,y) sqrt(rec_args.beta) * y ...
     );
 
 %% solve with CG
 x0 = zeros(seq_args.N*ones(1,3));
-x_star = qpwls_pcg1(x0, A, 1, kdata(:), 0, 'niter', rec_args.niter, 'stop_grad_tol', 1);
+x_star = qpwls_pcg1(x0, A, 1, kdata(:), C, 'niter', rec_args.niter);
+x_star = reshape(x_star,size(x0));

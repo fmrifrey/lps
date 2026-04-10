@@ -4,7 +4,7 @@
 rec_args.fname = './raw_data.h5'; % input raw data .h5 file name (see lps_convert_data.m)
 rec_args.fname_smaps = '../smaps.h5'; % smaps input file name
 rec_args.Q = 4; % number of compressed coils to use
-rec_args.N = 80; % recon image size
+rec_args.N = 140; % recon image size
 rec_args.echoes2use = []; % indices of echoes to include (empty = all)
 rec_args.ints2use = []; % indices of interleaves to include (empty = all)
 rec_args.prjs2use = []; % indices of projections to include (empty = all)
@@ -13,8 +13,8 @@ rec_args.P = []; % number of projections to use per frame (empty = nint*nprj)
 rec_args.niter = 30; % number of CG iterations
 rec_args.dcf_init = true; % option to initialize solution with density compensated NUFFT
 rec_args.use_parfor = true; % option to use parfor loop in frame/coil-wise NUFFTs
-rec_args.fermi_cutoff = 0.7; % fermi voxel basis function cutoff (frac of nominal resolution)
-rec_args.fermi_rolloff = 0.1; % fermi voxel basis function rolloff (frac of nominal resolution)
+rec_args.fermi_cutoff = 1.0; % fermi voxel basis function cutoff (frac of nominal resolution bound)
+rec_args.fermi_rolloff = 0.1; % fermi voxel basis function rolloff (frac of nominal resolution bound)
 rec_args.beta = 2^16; % tikhonov regularization parameter
 rec_args.debug = 0; % debug mode
 
@@ -36,6 +36,9 @@ end
 
 %% format the data and k-space trajectory
 fprintf('formatting data and k-space trajectories...\n');
+if isempty(rec_args.N)
+    rec_args.N = seq_args.N_nom;
+end
 if isempty(rec_args.echoes2use)
     rec_args.echoes2use = 1:seq_args.nechoes;
 end

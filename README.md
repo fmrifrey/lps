@@ -5,7 +5,7 @@
 
 by David Frey (djfrey@umich.edu)
 
-This repository contains vendor-agnostic pulse sequence programming and reconstruction for Looping Star MRI. This sequence has been extensively tested and used to acquire fMRI data on GE MR750 scanners. However, the sequence is still being developed for use on Siemens scanners.
+This repository contains vendor-agnostic pulse sequence programming and reconstruction for Looping Star MRI. This sequence has been extensively tested and used to acquire fMRI data on GE MR750 scanners. However, <b>this sequence is still being developed for use on Siemens scanners</b>.
 
 ## Table of contents
 1. [Table of contents](#table-of-contents)
@@ -18,14 +18,7 @@ This repository contains vendor-agnostic pulse sequence programming and reconstr
    - [Converting scanner data](#converting-scanner-data)
    - [Recon demo script](#reconstruction-demo)
    - [Reconstructing the calibration data (SENSE map estimation)](#reconstructing-the-calibration-data-sense-map-estimation)
-6. [LpS Theory](#lps-theory)
-   - [Pulse sequence basics](#pulse-sequence-basics) (still under development)
-   - [Reconstruction model](#reconstruction-model)
-      - [Basic model](#basic-model)
-      - [Echo-in/out filtering](#echo-inout-filtering)
-      - [Volume-wise acquisition model](#volume-wise-acquisition-model)
-      - [Solving the reconstruction problem](#solving-the-reconstruction-problem)
-7. [References](#references) (still under development)
+7. [References](#references)
 
 
 ## Getting started
@@ -41,6 +34,7 @@ Run the script [`lps_update_packages.m`](lps_update_packages.m). This will insta
 | --- | --- |
 | [Pulseq v1.5](https://github.com/pulseq/pulseq) | Vendor agnostic pulse sequence development |
 | [MIRT](https://github.com/JeffFessler/mirt) | General matlab functionality |
+| [PISCO](https://github.com/ralobos/PISCO) | Sensitivity map estimation |
 
 #### GE development only:
 | Package | Use |
@@ -51,6 +45,10 @@ Run the script [`lps_update_packages.m`](lps_update_packages.m). This will insta
 
 \*note: <i>Orchestra requires the GE SDK license and can be installed from [WeConnect](https://weconnect.gehealthcare.com/s/feed/0D53a00008pQ1Q8CAK). Once Orchestra has been installed locally, you can set its path as an environment variable called `ORCHESTRA_PATH_MATLAB` (i.e. on Linux, add the line `export ORCHESTRA_PATH_MATLAB="/path/to/orchestra"` to your `.bashrc` file).</i>
 
+#### Siemens development only:
+| Package | Use |
+| --- | --- |
+| [mapVBVD](https://github.com/pehses/mapVBVD) | Reading in raw Siemens data |
 
 ## Pulse sequence development
 
@@ -74,10 +72,16 @@ Several parameters can be set when running [`lps_write_seq.m`](lps_write_seq.m):
 | `nrep` | int | 1 | number of repeated projections (i.e. $$PV = n_\text{rep} \times n_\text{int} \times n_\text{prj}$$) |
 | `nint` | int | 1 | number of in-plane rotations (interleaves) (i.e. $$PV = n_\text{rep} \times n_\text{int} \times n_\text{prj}$$) |
 | `nprj` | int | 16 | number of thru-plane rotations (i.e. $$PV = n_\text{rep} \times n_\text{int} \times n_\text{prj}$$) |
+| `nechoes` | int | 16 | number of echoes to acquire (GREs only, not including FID) |
 | `nspokes` | int | 23 | number of spokes/rf excitations per plane |
+| `psd_rf_wait` | float | 100e-6 | RF–gradient delay (s), GE scanner-specific |
+| `psd_grd_wait` | float | 100e-6 | ADC–gradient delay (s), GE scanner-specific |
+| `coil` | str | 'xrm' | GE coil model (for PNS check) |
+| `dwell` | float | 4 | ADC sample rate (us) |
 | `t_seg` | float | 1120 | spoke length (us) |
 | `t_rf` | float | 16 | rf pulse width (us) |
 | `fa` | float | 4 | rf flip angle (degrees) |
+| `C` | $$L \times 3$$ matrix; float | default 2D looping star coefficients | k-space trajectory Fourier series basis coefficient matrix (for research purposes only) |
 | `plotseq` | bool | 0 | option to plot the sequence |
 | `pislquant` | int | 1 | number of TRs to acquire during prescan |
 | `writepge` | bool | 1 | option to write out .pge file to run on GE scanners |
@@ -111,11 +115,15 @@ Several parameters can be set when running [`gre3d/gre3d_write_seq.m`](gre3d/gre
 | `Rz` | int | 2 | Z CAIPI acceleration factor outside of ACS region |
 | `delta` | int | 1 | CAIPI odd/even shift |
 | `peorder` | string | snake | phase encode ordering scheme (snake or spiral) |
+| `dwell` | float | 4 | ADC sample rate (us) |
 | `dt` | float | 20e-6 | ADC sampling rate (s) |
 | `dummyshots` | int | 20 | number of dummy shots at beginning of sequence (to reach steady state) |
-| `plotseq` | bool | 0 | option to plot the sequence |
-| `pislquant` | int | 1 | number of TRs to acquire during prescan |
 | `writepge` | bool | 1 | option to write out .pge file to run on GE scanners |
+| `pislquant` | int | 1 | number of TRs to acquire during prescan |
+| `plotseq` | bool | 0 | option to plot the sequence |
+| `psd_rf_wait` | float | 100e-6 | RF–gradient delay (s), GE scanner-specific |
+| `psd_grd_wait` | float | 100e-6 | ADC–gradient delay (s), GE scanner-specific |
+| `coil` | str | 'xrm' | GE coil model (for PNS check) |
 
 Running [`gre3d/gre3d_write_seq.m`](gre3d/gre3d_write_seq.m) will create a few files in the directory specified by `dir`:
 - `gre3d.seq`: .seq file for Pulseq
@@ -161,23 +169,22 @@ gre3d raw data structure
 
 | Parameter name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `basedir` | string | ./ | directory containing data files |
-| `fname_kdata` | string | ./raw_data.h5 | name of input .h5 data file |
-| `fname_smaps` | string | ./smaps.h5 | name of input .h5 smaps file (see [section below](#reconstructing-the-calibration-data) for info on calculating SENSE maps)|
-| `fname_out` | string | ./recon_YYYYmmDDHHMM.h5 | name of output .h5 recon file |
-| `Q` | int | 4 | number of coils to compress to (i.e. $$Q$$) |
-| `mu_cutoff` | float in range (0,1) | 0.85 | Fermi filter cutoff parameter (i.e. $$\mu_\text{cutoff}$$) |
-| `sig_rolloff` | float in range (0,1) | 0.1 | Fermi filter rolloff parameter (i.e. $$\sigma_\text{rolloff}$$) |
-| `beta` | float | 2^12 | spatial roughness penalty regularization parameter |
-| `beta_t` | float | 2^8 | temporal roughness penalty regularization parameter |
+| `fname` | string | ./rawdata.h5 | file name for converted raw data |
+| `fname_smaps` | string | ./smaps.h5 | name of input .h5 smaps file (see [section below](#reconstructing-the-calibration-data) for info on calculating SENSE maps using PISCO) |
+| `Q` | int | 4 | number of coils to compress to |
+| `N` | int | empty | reconstruction matrix size (leave empty to use N_nom) |
 | `niter` | int | 30 | number of iterations of CG |
-| `N` | int | `N_nom` | reconstruction matrix size (i.e. $$N^{\frac{1}{3}}$$) |
-| `ints2use` | int | `nint` | number of interleaves to use in reconstruction |
-| `prjs2use` | int | `nprj` | number of projections to use in reconstruction |
-| `reps2use` | int | `nrep` | number of repetitions to use in reconstruction |
-| `P` | int | 32 | number of projections to bin per volume (i.e. $$P$$) |
-| `initdcf` | bool | 0 | option to initialize solution with density-compensated adjoint operation |
-| `usepar` | bool | 1 | option to parallelize over block computations (sense-maps or volumes) |
+| `ints2use` | array, int | empty | number of interleaves to use in reconstruction (leave empty to use all) |
+| `ints2use` | array, int | empty | number of interleaves to use in reconstruction (leave empty to use all) |
+| `prjs2use` | array, int | empty | number of projections to use in reconstruction (leave empty to use all) |
+| `reps2use` | array, int | empty | number of repetitions to use in reconstruction (leave empty to use all) |
+| `P` | int | empty | number of projections to bin per volume (leave empty to use all ints and prjs) |
+| `dcf_init` | bool | 0 | option to initialize solution with density-compensated adjoint operation |
+| `use_parfor` | bool | 1 | option to parallelize over block computations (sense-maps and volumes) |
+| `fermi_cutoff` | float (range 1-2) | 1 | fermi voxel basis function cutoff (frac of nominal resolution, 1 corresponds to no overlapping echoes, 2 corresponds to fully overlapping) |
+| `fermi_rolloff` | float (range 0-1) | 0.1 | fermi voxel basis function rolloff (frac of nominal resolution) |
+| `beta` | float | 2^16 | Tikhonov regularization parameter |
+| `debug` | bool | 0 | toggle debug mode |
 
 ### Reconstructing the calibration data (+SENSE map estimation)
 
@@ -185,198 +192,17 @@ gre3d raw data structure
 
 | Parameter name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `basedir` | string | ./ | directory containing data files |
-| `fname_kdata` | string | ./raw_data.h5 | name of input .h5 data file |
+| `fname` | string | ./raw_data.h5 | name of input .h5 data file |
 | `fname_smaps` | string | ./smaps.h5 | name of input or output .h5 smaps file |
-| `fname_out` | string | ./recon_YYYYmmDDHHMM.h5 | name of output .h5 recon file |
-| `estimate_smap` | bool | 1 | option to estimate sensitivity maps using CG |
-| `Q` | int | 8 | number of coils to compress to (i.e. $$Q$$) |
+| `estimate_smap` | bool | 1 | option to estimate sensitivity maps using [PISCO](https://mr.usc.edu/download/pisco/) |
+| `Q` | int | 8 | number of coils to compress to |
 | `niter` | int | 30 | number of iterations of CG |
-| `beta` | float | 0.5 | spatial roughness penalty regularization parameter |
-
-This code estimates coil sensitivity maps using the built in least-squares estimation model from MIRT, but it is recommended to use more advanced estimation methods such as [eSPIRIT](https://mrirecon.github.io/bart/) or [PISCO](https://mr.usc.edu/download/pisco/).
-
-## LpS Theory
-
-### Pulse sequence basics
-
-Looping Star (LpS) is a silent MRI pulse sequence based on gradient recalled zero-echo-time (ZTE) radial imaging, which multiplexes the readout of multiple echoes in order to achieve efficient k-space sampling while maintaining low gradient amplitude and slew rate.
-
-A single block (TR) of a basic LpS pulse sequence is shown in the figure below:
-<img width="1000" height="500" alt="lps_tr" src="https://github.com/user-attachments/assets/20f5e807-1702-4753-8586-c24addb6e136" />
-
-Each RF pulse in the first half of the sequence excites a population of spins, which are then dephased to the outer edge of k-space, $$k_\text{max}$$, before another population is excited by the next RF pulse. Each RF pulse excites a single spoke in k-space, which are sequentially refocused in the second half of the TR while all other spokes are dephased.
-
-#### Overlapping echoes
-
-When $$\frac{N}{\text{FOV}} > k_{\text{max}}$$, some of signal encoded from the echo moving into the sampling region (in-spoke) will overlap with the signal encoded by the out-spoke. If not accounted for, this will result in high signal from the center of k-space appearing on the outside of k-space. It is also known that this signal overlap results in ill-conditioning of the encoding matrix. However, if correctly accounted for, this can allow one to improve the image resolution without needing to acquire more data.
-
-#### 3D k-space encoding
-
-### Reconstruction model
-
-#### Basic model
-
-The acquisition of the $$p^\text{th}$$ 3D k-space projection can be modeled as:
-
-$$b_p = (A_{\text{in},p} + A_{\text{out},p})\ x(p\text{ TR}) + \epsilon_p, \quad p = 0,1,...VP-1$$
-
-where:
-- $$x(t): \mathbb{R} \to \mathbb{C}^{N^3}$$: discrete volumetric image at time $$t$$
-- $$N^3 \in \mathbb{Z}$$: number of <i>reconstructed</i> voxels in single volumetric image
-- $$b_p \in \mathbb{C}^{MQ}$$: acquired multi-channel k-space data containing overlapping echoes from the $$p^\text{th}$$ 3D k-space projection
-- $$P \in \mathbb{Z}$$: number of 3D k-space projections per volume
-- $$V \in \mathbb{Z}$$: total number of acquired volumes
-- $$\epsilon_p \in \mathbb{C}^{MQ}$$: acqusition noise from the $$p^\text{th}$$ 3D k-space projection
-- $$M \in \mathbb{Z}$$: number of acquired k-space samples per 3D k-space projection
-- $$Q \in \mathbb{Z}$$: number of coil channels for parallel imaging
-- $$A_{\text{in},p},A_{\text{out},p} \in \mathbb{C}^{MQ \times N^3}$$: multi-channel k-space encoding matrices for the in-spoke and out-spoke data of the $$p^\text{th}$$ 3D k-space projection, respectively, i.e.:
-
-$$A_{\text{in/out},p} = (I_Q \otimes F_{\text{in/out},p})\ S$$
-
-- $$I_Q \in \mathbb{R}^{Q \times Q}$$: rank $$Q$$ identity matrix
-- $$F_{\text{in/out},p} \in \mathbb{C}^{M \times N^3}$$: \*Fourier encoding matrix for the in- or out-spoke of the $$p^\text{th}$$ 3D k-space projection, i.e.:
-
-$$F_{\text{in/out},p} \approx \exp{ (-j 2 \pi\ k_{\text{in/out},p}\ r^T ) }$$
-
-\*note: <i>the true DTFT matrix is typically substituted for an non-uniform FFT (nuFFT) operator to improve speed, hence the approximation</i>
-
-- $$k_{\text{in/out},p} \in \mathbb{R}^{M \times 3}$$: non-cartesian 3D k-space sample coordinates for the in- or out-spoke of the $$p^\text{th}$$ 3D k-space projection, i.e.:
-
-$$k_{\text{in/out},p} = k_{\text{in/out},0} R_p^T$$
-
-- $$R_p \in \mathbb{R}^{3 \times 3}$$: 3D golden angle rotation matrix for $$p^\text{th}$$ 3D k-space projection
-- $$r \in \mathbb{R}^{N^3 \times 3}$$: 3D cartesian image space sampling coordinates
-- $$S \in \mathbb{C}^{N^3Q \times N^3}$$: sensitivity encoding operator, i.e.:
-
-$$
-S = \begin{bmatrix}
-   \text{diag}(s_1) \\
-   \text{diag}(s_2) \\
-   \vdots \\
-   \text{diag}(s_Q)
-   \end{bmatrix}
-$$
-
-- $$s_q \in \mathbb{C}^{N^3}$$: discrete volumetric coil sensitivity map of the $$q^\text{th}$$ channel
-
-#### Echo-in/out filtering
-
-Additionally, we often account for the ill-conditioning at the edges of k-space due to echo overlap by applying a Fermi-shaped filter to the data which downweights the signal high frequencies, i.e.:
-
-$$A_{\text{in/out},p} = (I_Q \otimes (H_\text{in/out} F_{\text{in/out},p}))\ S$$
-
-where:
-- $$H_\text{in/out} \in \mathbb{C}^{M \times M}$$: Fermi-shaped k-space filter for the in- or out-spoke, i.e.:
-
-$$H_\text{in/out} = \text{diag}\left( \frac{1}{1 + \exp{\left(2 \pi \frac{|k_{\text{in/out},0}| - \mu_\text{cutoff}k_\text{max}}{\sigma_\text{rolloff}k_\text{max}} \right)}} \right)$$
-
-- $$|k_{\text{in/out},0}| \in \mathbb{R}^M$$: non-cartesian 3D k-space sample coordinate radii for the in- or out-spoke of the $$0^\text{th}$$ k-space projection
-- $$k_\text{max} \in \mathbb{R}$$: maximum k-space sample coordinate radii
-- $$\mu_\text{cutoff},\sigma_\text{rolloff} \in (0,1)$$: Fermi filter cutoff and rolloff parameters, respectively
-
-#### Volume-wise acquisition model
-
-For multi-volumetric imaging, the acquisition can be modeled by using a block matrix representation which bins together $$P$$ projections per volume and reconstructs each volume as a seperate volumetric image:
-
-$$\mathbf{b} = \mathbf{A} \mathbf{x} + \mathbf{\epsilon}$$
-
-where:
-- $$\mathbf{x} \in \mathbb{C}^{N^3V}$$: discrete volumetric image timeseries, i.e.:
-
-$$
-\mathbf{x} =
-\begin{bmatrix}
-   x(0) \\
-   x(P\text{ TR}) \\
-   \vdots \\
-   x((V-1)P\text{ TR})
-\end{bmatrix}
-$$
-
-- $$\mathbf{b} \in \mathbb{C}^{MQPV}$$: multi-volume, multi-projection, multi-channel k-space data, i.e.:
-
-$$
-\mathbf{b} =
-\begin{bmatrix}
-   \begin{bmatrix}
-      b_0 \\
-      b_1 \\
-      \vdots \\
-      b_{P-1}
-   \end{bmatrix} \\
-   \begin{bmatrix}
-      b_P \\
-      b_{P+1} \\
-      \vdots \\
-      b_{2P-1}
-   \end{bmatrix} \\
-   \vdots \\
-   \begin{bmatrix}
-      b_{(V-1)P} \\
-      b_{(V-1)P+1} \\
-      \vdots \\
-      b_{VP-1}
-   \end{bmatrix}
-\end{bmatrix}
-$$
-
-- $$\mathbf{\epsilon} \in \mathbb{C}^{MQPV}$$: acquisition noise
-- $$\mathbf{A} \in \mathbb{C}^{MQPV \times N^3V}$$: multi-volume, multi-projection, multi-channel acquisition model, i.e.:
-
-$$
-\mathbf{A} = 
-\begin{bmatrix}
-   \begin{bmatrix}
-      A_{\text{in},0} + A_{\text{out},0} \\
-      A_{\text{in},1} + A_{\text{out},1} \\
-      \vdots \\
-      A_{\text{in},P-1} + A_{\text{out},P-1}
-   \end{bmatrix} & \mathbf{0} \\
-   \mathbf{0} & \begin{bmatrix}
-      A_{\text{in},P} + A_{\text{out},P} \\
-      A_{\text{in},P+1} + A_{\text{out},P+1} \\
-      \vdots \\
-      A_{\text{in},2P-1} + A_{\text{out},2P-1}
-   \end{bmatrix} \\
-   && \ddots \\
-   &&& \begin{bmatrix}
-      A_{\text{in},(V-1)P} + A_{\text{out},(V-1)P} \\
-      A_{\text{in},(V-1)P+1} + A_{\text{out},(V-1)P+1} \\
-      \vdots \\
-      A_{\text{in},VP-1} + A_{\text{out},VP-1}
-   \end{bmatrix} \\
-\end{bmatrix}
-$$
-
-\*note: <i>here, we assume linearity of the encoding matrices in order to vertically concatenate the projection-wise encoding matrices into each volume. However, in the case of nuFFT approximation which is non-linear, each volume-wise operator must be constructed by first concatenating the k-space sampling coordinates of each projection when computing the nuFFT operator for each volume</i>
-
-#### Solving the reconstruction problem
-
-We can solve for the best image in terms of $\ell2$ norm error by solving the following Least Squares problem:
-
-$$ \mathbf{x}_* = \underset{\mathbf{x}}{\text{argmin}} \text{ ||}\mathbf{A} \mathbf{x} - \mathbf{b}\text{||}_2^2 $$
-
-If the total number of k-space samples is less than the number of reconstructed voxels (i.e. $$MPQ \lt N^3$$), the problem above is underdetermined, and has infinitely many solutions of the form:
-
-$$ \mathbf{x}_* = \mathbf{A}^+ \mathbf{b} + \mathbf{z}$$
-
-where:
-- $$\mathbf{A}^+ \in \mathbb{C}^{N^3V \times MQPV}$$: right Moore-Penrose psuedoinverse of $$\mathbf{A}$$
-- $$\mathbf{z} \in \mathcal{N}(\mathbf{A})$$: any vector in the $$(N^3 - MQP)V$$-dimensional nullspace of $$\mathbf{A}$$
-
-In other words, since k-space is undersampled, there are infinitely many ways to fill in the missing frequency components. The nullspace of $$\mathbf{A}$$ represents the missing frequency components. $$\mathbf{A}^+ \mathbf{b}$$ is called the minimum-norm solution, which zero-fills the missing frequency components. This is the solution that contains aliasing which gradient-based methods will converge to. However, with the right choice of $$z$$, the true, un-aliased image is also an equally likely solution in terms of $$\ell2$$ error.
-
-Similarly, we can still acquire enough samples such that $$MPQ \geq N^3$$ without fully representing all the needed frequency components. This is especially the case in LpS when the edges of 3D k-space are undersampled while the origin is oversampled. In this case, the problem is fully or overdetermined, but ill-conditioned. The problem has an exact solution, $$\mathbf{x}_* = \mathbf{A}^+ \mathbf{b}$$, but is most likely to be dominated by the overfitting of noise. Other solutions that are equally as likely (such as the true image) only differ in data consistency due to subtle differences in the noise profile. To better condition our problem, we can promote or penalize certain solutions based on prior assumptions about the true image by adding a regularization term:
-
-$$ \mathbf{x}_* = \underset{\mathbf{x}}{\text{argmin}} \text{ ||}\mathbf{A} \mathbf{x} - \mathbf{b}\text{||}_2^2 + g(\mathbf{x})$$
-
-where:
-- $$g(x): \mathbb{C}^{N^3V} \to \mathbb{R}$$: regularization function
-
-For example, if $$g(x) = \text{||}(F \otimes I_{N^3})x\text{||}_1$$ where $$F \in \mathbb{C}^{V \times V}$$ is a discrete temporal Fourier Transform operator, solutions which have a sparse temporal frequency representation will be promoted.
-
-The problem can then be solved using gradient based methods (i.e. CG, FISTA, PGM), which depend on the choice of regularization function, its convexity/linearity and smoothness.
-
+| `beta` | float | 0.5 | Tikhonov regularization parameter |
 
 ## References
+
+[1] Wiesinger, F., Menini, A., & Solana, A. B. (2019). Looping star. Magnetic resonance in medicine, 81(1), 57-68.
+
+[2] Xiang, H., Fessler, J. A., & Noll, D. C. (2024). Model‐based reconstruction for looping‐star MRI. Magnetic resonance in medicine, 91(5), 2104-2113.
+
+[3] Lobos, R. A., Chan, C. C., & Haldar, J. P. (2023). New theory and faster computations for subspace-based sensitivity map estimation in multichannel MRI. IEEE transactions on medical imaging, 43(1), 286-296.
