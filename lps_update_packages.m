@@ -53,3 +53,10 @@ system('[ -d "./PISCO" ] && rm -rf ./PISCO');
 system('git clone git@github.com:ralobos/PISCO.git 2> /dev/null');
 addpath PISCO
 fprintf('done.\n')
+
+%% mapVBVD (for reading in data from Siemens scanners)
+fprintf('updating mapVBVD... ')
+system('[ -d "./mapVBVD" ] && rm -rf ./mapVBVD');
+system('git clone git@github.com:pehses/mapVBVD.git 2> /dev/null');
+addpath mapVBVD
+fprintf('done.\n')
