@@ -123,12 +123,6 @@ function gre3d_write_seq(varargin)
         'system', arg.sys);
     
     % create spoilers
-    gxSpoil = mr.makeTrapezoid('x', ...
-        'Area', 4*arg.N/(arg.fov*1e-2), ...
-        'system', arg.sys);
-    gySpoil = mr.makeTrapezoid('y', ...
-        'Area', 4*arg.N/(arg.fov*1e-2), ...
-        'system', arg.sys);
     gzSpoil = mr.makeTrapezoid('z', ...
         'Area', 4*arg.N/(arg.fov*1e-2), ...
         'system', arg.sys);
@@ -147,7 +141,7 @@ function gre3d_write_seq(varargin)
     end
     
     % determine repetition time delay
-    tr_min = arg.fatsat*mr.calcDuration(rf_fat) + mr.calcDuration(gxSpoil) + ...
+    tr_min = arg.fatsat*mr.calcDuration(rf_fat) + mr.calcDuration(gzSpoil) + ...
         mr.calcDuration(rf) + mr.calcDuration(gzReph) + ...
         mr.calcDuration(gzPre) + te_delay + mr.calcDuration(gx) + ...
         mr.calcDuration(gzPre);
@@ -181,14 +175,14 @@ function gre3d_write_seq(varargin)
         if arg.fatsat
             % add fat saturation
             seq.addBlock(rf_fat, lbl);
-            seq.addBlock(gxSpoil, gySpoil, gzSpoil);
+            seq.addBlock(gzSpoil);
 
             % add excitation and refocuser
             seq.addBlock(rf, gz);
             seq.addBlock(gzReph);
         else
             % add spoiler
-            seq.addBlock(gxSpoil, gySpoil, gzSpoil, lbl);
+            seq.addBlock(gzSpoil, lbl);
 
             % add excitation and refocuser
             seq.addBlock(rf, gz);
@@ -263,7 +257,7 @@ function gre3d_write_seq(varargin)
             'rf_ringdown_time', arg.sys.rfRingdownTime, ...
             'gamma', arg.sys.gamma*1e-4 ... % GMR (Hz/G)
             );
-        params = pge2.check(ceq,sysGE,'wt',[0,0,0]); % temporary fix - override pns checks
+        params = pge2.check(ceq,sysGE);
         pge2.writeceq(ceq, [arg.dir,'/gre3d.pge'], ...
             'sysGE', sysGE, 'pislquant', min(arg.pislquant,1), ...
             'params', params);
