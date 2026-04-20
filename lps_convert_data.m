@@ -64,7 +64,7 @@ function [kdata,k_in,k_out,seq_args] = lps_convert_data(fname, ofile)
     end
 
     % generate kspace trajectory
-    [~,~,~,~,k_in0,k_out0] = lpsutl.gen_lps_waveforms( ...
+    [~,~,~,k_in0,k_out0] = lpsutl.gen_lps_waveforms( ...
         'sys', seq_args.sys, ... % pulseq mr system object
         'fov', seq_args.fov, ... % fov (cm)
         'N', seq_args.N_nom, ... % nominal matrix size

@@ -1,4 +1,4 @@
-function [g,g0,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
+function [g,g0,rf,k_in,k_out] = gen_lps_waveforms(varargin)
 % generates gradient and rf waveforms for a single looping star TR, also
 % returns trajectory
 % by David Frey (djfrey@umich.edu)
@@ -19,7 +19,6 @@ function [g,g0,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
 % g - gradient waveforms (Hz/m)
 % g0 - gradient amplitudes at 0 and each echo time (Hz/m)
 % rf - rf waveform (Hz)
-% t_ramp - ramp time (s)
 % k_in - kspace spoke-in trajectory (1/cm)
 % k_out - kspace spoke-out trajectory (1/cm)
 %
@@ -86,11 +85,6 @@ function [g,g0,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
     rf_amp = arg.fa / (360 * arg.t_rf*1e-6); % (Hz)
     assert(rf_amp <= arg.sys.maxB1, ...
         'rf amp exceeds limit with given parameters')
-
-    % calculate ramp time
-    t_ramp = g_max / s_max; % minimum to ensure slew is no greater (s)
-    t_ramp = dt_g*1e-6 * ceil(t_ramp / (dt_g*1e-6)); % round to gradient raster (s)
-    t_ramp = dt_rf*1e-6 * ceil(t_ramp / (dt_rf*1e-6)); % round to rf raster (s)
     
     % construct rf burst pulse
     nseg_rf = round(arg.t_seg/dt_rf);
