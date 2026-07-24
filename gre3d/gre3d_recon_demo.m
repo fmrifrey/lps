@@ -1,8 +1,8 @@
 %% GRE3D recon + sensitivity map estimation demo script
 % by David Frey
 %% set parameters
-rec_args.fname = './raw_data.h5'; % input raw data .h5 file name (see gre3d_convert_data.m)
-rec_args.fname_smaps = '../smaps.h5'; % smaps input file name
+rec_args.fname = './raw_data_sub1.h5'; % input raw data .h5 file name (see gre3d_convert_data.m)
+rec_args.fname_smaps = '../smaps_sub1.h5'; % smaps input file name
 rec_args.estimate_smap = true; % option to estimate sensitivity maps from ACS data
 rec_args.Q = 8; % number of coils to compress to for recon
 rec_args.niter = 30; % number of iterations for CG
@@ -73,15 +73,9 @@ A = fatrix2('idim', seq_args.N*ones(1,3), ...
     'back', @(~,y) sum(conj(smaps) .* lpsutl.ifftc(msk .* y, 1:3), 4) ...
     );
 
-% set up identity operator for tikhonov regularization
-C = fatrix2( ...
-    'idim', seq_args.N*ones(1,3), ...
-    'odim', seq_args.N*ones(1,3), ...
-    'forw', @(~,x) sqrt(rec_args.beta) * x, ...
-    'back', @(~,y) sqrt(rec_args.beta) * y ...
-    );
 
 %% solve with CG
 x0 = zeros(seq_args.N*ones(1,3));
-x_star = qpwls_pcg1(x0, A, 1, kdata(:), C, 'niter', rec_args.niter);
+x_star = qpwls_pcg1(x0, A, 1, kdata(:), sqrt(rec_args.beta), ...
+    'niter', rec_args.niter);
 x_star = reshape(x_star,size(x0));

@@ -19,6 +19,13 @@ function s = loadh5struct(fname, groupName)
     info = h5info(fname, groupName);
     s = struct();
 
+    % load attributes in this group
+    for i = 1:length(info.Attributes)
+        name = info.Attributes(i).Name;
+        fieldName = matlab.lang.makeValidName(name);
+        s.(fieldName) = h5readatt(fname, groupName, name);
+    end
+
     % load datasets in this group
     for i = 1:length(info.Datasets)
         name = info.Datasets(i).Name;
@@ -32,6 +39,5 @@ function s = loadh5struct(fname, groupName)
         groupField = matlab.lang.makeValidName(baseName);
         s.(groupField) = loadh5struct(fname, fullGroupName);
     end
-
+    
 end
-

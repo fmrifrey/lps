@@ -55,6 +55,7 @@ function [kdata,msk,seq_args] = gre3d_convert_data(fname,ofile)
                 currentControl = GERecon('Archive.Next', archive);
                 if i == 1
                     [~,nc] = size(currentControl.Data);
+                    d1 = zeros(seq_args.N, nc, seq_args.N, seq_args.N);
                 end
                 d1(:,:,pe_idcs(i,1),pe_idcs(i,2)) = currentControl.Data;
             end

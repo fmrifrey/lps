@@ -1,20 +1,21 @@
 %% Looping Star demo recon script
 % by David Frey
 %% set parameters
-rec_args.fname = './raw_data_sphere.h5'; % input raw data .h5 file name (see lps_convert_data.m)
-rec_args.fname_smaps = '../smaps_sphere.h5'; % smaps input file name
+rec_args.fname = './raw_data_sub2.h5'; % input raw data .h5 file name (see lps_convert_data.m)
+rec_args.fname_smaps = '../smaps_sub2.h5'; % smaps input file name
 rec_args.Q = 6; % number of compressed coils to use
-rec_args.N = []; % recon image size
+rec_args.N = 90; % recon image size
+rec_args.fov = 22; % recon fov
 rec_args.echoes2use = []; % indices of echoes to include (empty = all)
 rec_args.ints2use = []; % indices of interleaves to include (empty = all)
-rec_args.prjs2use = []; % indices of projections to include (empty = all)
+rec_args.prjs2use = 1:32; % indices of projections to include (empty = all)
 rec_args.reps2use = []; % indices of repetitions to include (empty = all)
-rec_args.P = []; % number of projections to use per frame (empty = nint*nprj)
+rec_args.P = 32; % number of projections to use per frame (empty = nint*nprj)
 rec_args.niter = 30; % number of CG iterations
 rec_args.dcf_init = true; % option to initialize solution with density compensated NUFFT
 rec_args.use_parfor = true; % option to use parfor loop in frame/coil-wise NUFFTs
-rec_args.fermi_cutoff = 1; % fermi voxel basis function cutoff (frac of nominal resolution bound)
-rec_args.fermi_rolloff = 0.1; % fermi voxel basis function rolloff (frac of nominal resolution bound)
+rec_args.fermi_cutoff = 1.2; % fermi voxel basis function cutoff (frac of nominal resolution bound)
+rec_args.fermi_rolloff = 0.05; % fermi voxel basis function rolloff (frac of nominal resolution bound)
 rec_args.beta = 2^14; % tikhonov regularization parameter
 rec_args.debug = 0; % debug mode
 
@@ -106,17 +107,5 @@ end
 
 %% solve the recon problem with CG
 fprintf('solving recon problem with CG...\n')
-C = fatrix2( ... % identity operator for tikhonov regularization
-    'idim', rec_args.N*ones(1,3), ...
-    'odim', rec_args.N*ones(1,3), ...
-    'forw', @(~,x) sqrt(rec_args.beta) * x, ...
-    'back', @(~,y) sqrt(rec_args.beta) * y ...
-    );
-if nechoes > 1 || nvol > 1
-    C = kronI(nechoes,C);
-    if nvol > 1
-        C = kronI(nvol,C);
-    end
-end
-x_star = qpwls_pcg1(x0,A,1,kdata(:),C,'niter',rec_args.niter);
+x_star = qpwls_pcg1(x0,A,1,kdata(:),sqrt(rec_args.beta),'niter',rec_args.niter);
 x_star = reshape(x_star,size(x0));
