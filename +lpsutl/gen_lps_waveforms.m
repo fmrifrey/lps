@@ -1,4 +1,4 @@
-function [g,g0,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
+function [g_enc,g_rup,g_rdn,g0,rf,k_in,k_out] = gen_lps_waveforms(varargin)
 % generates gradient and rf waveforms for a single looping star TR, also
 % returns trajectory
 % by David Frey (djfrey@umich.edu)
@@ -16,8 +16,8 @@ function [g,g0,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
 % plotwavs - option to plot the waveforms
 %
 % outputs:
-% g - gradient waveforms (Hz/m)
-% g0 - gradient amplitudes at 0 and each echo time (Hz/m)
+% g_enc - encoding gradient waveforms (Hz/m)
+% g0 - gradient amplitudes at t = t_0^(1) + n*TE (Hz/m)
 % rf - rf waveform (Hz)
 % t_ramp - ramp time (s)
 % k_in - kspace spoke-in trajectory (1/cm)
@@ -34,7 +34,12 @@ function [g,g0,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
     arg.t_seg = 1120; % time/segment (us)
     arg.t_rf = 12; % time/rf pulse (us)
     arg.fa = 3; % rf flip angle (deg)
-    arg.C = [0, 0, 0; 1, 0, 0; 0, 1, 1]; % fourier basis coefficient matrix
+    arg.h_enc = 1; % fourier series basis harmonics for encoding gradient (length L/2 - 1)
+    arg.C_enc = [0, 0, 0; 1, 0, 0; 0, 1, 1]; % fourier basis coefficient matrix for encoding gradient (L x 3)
+    arg.t_ramp = []; % ramp duration (leave empty for slew-minimized time in linear ramp case)
+    arg.C_rup = []; % bspline basis coefficient matrix for ramp up gradient (L_ramp x 3, leave empty for linear ramps)
+    arg.C_rdn = []; % bspline basis coefficient matrix for ramp down gradient (L_ramp x 3, leave empty for linear ramps)
+    arg.rescale = true; % option to rescale the gradients to meet the crushing condition
     arg.plotwavs = false; % option to plot the waveforms
 
     % parse inputs
@@ -51,7 +56,7 @@ function [g,g0,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
         error('trf must be divisible by rf raster time');
     end
 
-    % create the k-space and gradient basis functions
+    % create the encoding k-space and gradient basis functions
     nf = (size(arg.C, 1) - 1) / 2;
     B = @(t) fourier_series_basis(t, nf, arg.nspokes * arg.t_seg*1e-6 / nf);
     dB = @(t) fourier_series_basis_d1(t, nf, arg.nspokes * arg.t_seg*1e-6 / nf);
@@ -88,7 +93,11 @@ function [g,g0,rf,t_ramp,k_in,k_out] = gen_lps_waveforms(varargin)
         'rf amp exceeds limit with given parameters')
 
     % calculate ramp time
-    t_ramp = g_max / s_max; % minimum to ensure slew is no greater (s)
+    if ~isempty(arg.t_ramp)
+        t_ramp = arg.t_ramp;
+    else
+        t_ramp = g_max / s_max; % minimum to ensure slew is no greater (s)
+    end
     t_ramp = dt_g*1e-6 * ceil(t_ramp / (dt_g*1e-6)); % round to gradient raster (s)
     t_ramp = dt_rf*1e-6 * ceil(t_ramp / (dt_rf*1e-6)); % round to rf raster (s)
     
