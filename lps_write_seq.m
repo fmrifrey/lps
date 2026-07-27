@@ -58,14 +58,14 @@ function lps_write_seq(varargin)
     warning('OFF', 'mr:restoreShape');
 
     % create looping star waveforms
-    [g_wav,g0,rf_wav,t_ramp] = lpsutl.gen_lps_waveforms( ...
+    [g_enc,g_rup,g_rdn,g0,rf,k_in,k_out] = lpsutl.gen_lps_waveforms( ...
         'sys', arg.sys, ... % pulseq mr system structure
         'fov', arg.fov, ... % fov (cm)
         'dwell', arg.dwell, ... % adc dwell time (us)
         'N', arg.N_nom, ... % nominal matrix size
         'nspokes', arg.nspokes, ... % number of lps spokes
         'nechoes', arg.nechoes, ... % number of echoes
-        'C', arg.C, ... % fourier coefficient matrix
+        'C_enc', arg.C_enc, ... % fourier coefficient matrix
         't_seg', arg.t_seg, ... % time/segment
         't_rf', arg.t_rf, ... % rf pulse width
         'fa', arg.fa ... % rf flip angle (deg)

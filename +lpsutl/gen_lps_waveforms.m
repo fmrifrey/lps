@@ -39,6 +39,7 @@ function [g_enc,g_rup,g_rdn,g0,rf,k_in,k_out] = gen_lps_waveforms(varargin)
     arg.t_ramp = []; % ramp duration (leave empty for slew-minimized time in linear ramp case)
     arg.C_rup = []; % bspline basis coefficient matrix for ramp up gradient (L_ramp x 3, leave empty for linear ramps)
     arg.C_rdn = []; % bspline basis coefficient matrix for ramp down gradient (L_ramp x 3, leave empty for linear ramps)
+    arg.ramp_order = 2; % bspline order for ramp gradients
     arg.rescale = true; % option to rescale the gradients to meet the crushing condition
     arg.plotwavs = false; % option to plot the waveforms
 
@@ -57,30 +58,34 @@ function [g_enc,g_rup,g_rdn,g0,rf,k_in,k_out] = gen_lps_waveforms(varargin)
     end
 
     % create the encoding k-space and gradient basis functions
-    nf = (size(arg.C, 1) - 1) / 2;
+    nf = (size(arg.C_enc, 1) - 1) / 2;
     B = @(t) fourier_series_basis(t, nf, arg.nspokes * arg.t_seg*1e-6 / nf);
     dB = @(t) fourier_series_basis_d1(t, nf, arg.nspokes * arg.t_seg*1e-6 / nf);
 
     % determine the scale factor based on minimum segment radius
-    min_seg_dist = Inf;
-    for s = 1:arg.nspokes*(arg.nechoes + 1)
-        seg_dist = norm((B(s*arg.t_seg*1e-6) - B((s-1)*arg.t_seg*1e-6)) * arg.C, 2);
-        min_seg_dist = min(min_seg_dist, seg_dist);
+    if arg.rescale
+        min_seg_dist = Inf;
+        for s = 1:arg.nspokes*(arg.nechoes + 1)
+            seg_dist = norm((B(s*arg.t_seg*1e-6) - B((s-1)*arg.t_seg*1e-6)) * arg.C_enc, 2);
+            min_seg_dist = min(min_seg_dist, seg_dist);
+        end
+        k_scale_factor = arg.N / (arg.fov*1e-2) / min_seg_dist;
+    else
+        k_scale_factor = 1;
     end
-    k_scale_factor = arg.N / (arg.fov*1e-2) / min_seg_dist;
 
     % create the gradient waveform function
-    g_fun = @(t) k_scale_factor * dB(t) * arg.C; % (Hz/m)
+    g_fun = @(t) k_scale_factor * dB(t) * arg.C_enc; % (Hz/m)
 
     % construct looping star gradients
     nseg_g = round(arg.t_seg/dt_g);
     n_g = (0:(arg.nechoes+1)*arg.nspokes*nseg_g-1) + 0.5;
-    g = g_fun(n_g*dt_g*1e-6);
+    g_enc = g_fun(n_g*dt_g*1e-6);
     g0 = g_fun((0:arg.nechoes+1)'*arg.nspokes*arg.t_seg*1e-6);
 
     % get max gradient and amplitudes
-    g_max = max(abs(g),[],'all'); % Hz/cm
-    s_max = max(abs(diff(g)/(dt_g*1e-6)),[],'all'); % Hz/cm/s
+    g_max = max(abs(g_enc),[],'all'); % Hz/cm
+    s_max = max(abs(diff(g_enc)/(dt_g*1e-6)),[],'all'); % Hz/cm/s
 
     % get the gradients at ADC times to calculate k-space trajectory
     nseg_adc = round(arg.t_seg/dt_adc);
@@ -94,13 +99,39 @@ function [g_enc,g_rup,g_rdn,g0,rf,k_in,k_out] = gen_lps_waveforms(varargin)
 
     % calculate ramp time
     if ~isempty(arg.t_ramp)
-        t_ramp = arg.t_ramp;
+        t_ramp = arg.t_ramp * 1e-3;
     else
         t_ramp = g_max / s_max; % minimum to ensure slew is no greater (s)
     end
     t_ramp = dt_g*1e-6 * ceil(t_ramp / (dt_g*1e-6)); % round to gradient raster (s)
     t_ramp = dt_rf*1e-6 * ceil(t_ramp / (dt_rf*1e-6)); % round to rf raster (s)
+    n_ramp = t_ramp / (dt_g*1e-6); % number of ramp points
+    n_gramp = (0:n_ramp-1) + 0.5; % samples
+
+    % construct ramp functions
+    if ~isempty(arg.C_rup) && ~isempty(arg.C_rdn) % construct ramps from b-spline bases
+        
+        % construct b-spline bases
+        n_knots = size(arg.C_rup,1) - arg.ramp_order + 1;
+        t_knots = linspace(0, t_ramp, n_knots);
+        B_ramp = @(t) bspline_basis(t, t_knots, arg.ramp_order);
+
+        % construct the gradient functions
+        g_fun_rup = @(t) k_scale_factor * B_ramp(t(:)) * arg.C_rup;
+        g_fun_rdn = @(t) k_scale_factor * B_ramp(t(:)) * arg.C_rdn;
+
+    else % construct linear ramps
+
+        % construct the gradient functions
+        g_fun_rup = @(t) g0(1,:) .* t(:) / t_ramp;
+        g_fun_rdn = @(t) g0(end,:) .* (1 - t(:) / t_ramp);
+
+    end
     
+    % construct the discrete ramp waveforms
+    g_rup = g_fun_rup(n_gramp * dt_g * 1e-6);
+    g_rdn = g_fun_rdn(n_gramp * dt_g * 1e-6);
+
     % construct rf burst pulse
     nseg_rf = round(arg.t_seg/dt_rf);
     n_rf = 0:(arg.nspokes-1)*nseg_rf+round(arg.t_rf/dt_rf)-1;
@@ -156,6 +187,52 @@ function dB = fourier_series_basis_d1(t,nf,dt)
         omega = 2 * pi * f(i);
         dB(:, 2*(i-1) + 2) = -omega * sin(omega * t);
         dB(:, 2*(i-1) + 3) = omega * cos(omega * t);
+    end
+
+end
+
+function B = bspline_basis(t, t_knots, k)
+
+    % define recursive b-spline function
+    function result = b_recursive(i, k, t, t_padded)
+    
+        t_i     = t_padded(i);
+        t_ipk   = t_padded(i + k);
+        t_ip1   = t_padded(i + 1);
+        t_ipkp1 = t_padded(i + k + 1);
+    
+        if k == 0
+            result = double((t >= t_i) & (t < t_ip1));
+            return;
+        end
+    
+        term1  = zeros(size(t));
+        term2  = zeros(size(t));
+        denom1 = t_ipk - t_i;
+        denom2 = t_ipkp1 - t_ip1;
+    
+        if denom1 > 0
+            term1 = (t - t_i) / denom1 .* b_recursive(i, k - 1, t, t_padded);
+        end
+    
+        if denom2 > 0
+            term2 = (t_ipkp1 - t) / denom2 .* b_recursive(i + 1, k - 1, t, t_padded);
+        end
+    
+        result = term1 + term2;
+    end
+
+    % generate the b-spline basis functions
+    t = t(:);
+    t_knots = t_knots(:)';
+
+    t_padded = [repmat(t_knots(1), 1, k), t_knots, repmat(t_knots(end), 1, k)];
+    n_basis  = length(t_padded) - k - 1;
+    N        = length(t);
+    B        = zeros(N, n_basis);
+
+    for i = 1:n_basis
+        B(:, i) = b_recursive(i, k, t, t_padded);
     end
 
 end
