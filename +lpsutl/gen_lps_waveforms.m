@@ -58,9 +58,8 @@ function [g_enc,g_rup,g_rdn,g0,rf,k_in,k_out] = gen_lps_waveforms(varargin)
     end
 
     % create the encoding k-space and gradient basis functions
-    nf = (size(arg.C_enc, 1) - 1) / 2;
-    B = @(t) fourier_series_basis(t, nf, arg.nspokes * arg.t_seg*1e-6 / nf);
-    dB = @(t) fourier_series_basis_d1(t, nf, arg.nspokes * arg.t_seg*1e-6 / nf);
+    B = @(t) fourier_series_basis(t, arg.h_enc * 1/(arg.nspokes * arg.t_seg*1e-6));
+    dB = @(t) fourier_series_basis_d1(t, arg.h_enc * 1/(arg.nspokes * arg.t_seg*1e-6));
 
     % determine the scale factor based on minimum segment radius
     if arg.rescale
@@ -165,9 +164,9 @@ function [g_enc,g_rup,g_rdn,g0,rf,k_in,k_out] = gen_lps_waveforms(varargin)
 
 end
 
-function B = fourier_series_basis(t,nf,dt)
+function B = fourier_series_basis(t,f)
 
-    f = (1:nf) / (nf*dt); % fourier series frequencies
+    nf = length(f);
     B = ones(length(t), 2*nf+1); % DC in col 1
 
     for i = 1:nf
@@ -178,9 +177,9 @@ function B = fourier_series_basis(t,nf,dt)
 
 end
 
-function dB = fourier_series_basis_d1(t,nf,dt)
+function dB = fourier_series_basis_d1(t,f)
 
-    f = (1:nf) / (nf*dt); % fourier series frequencies
+    nf = length(f);
     dB = zeros(length(t), 2*nf+1); % DC in col 1
 
     for i = 1:nf

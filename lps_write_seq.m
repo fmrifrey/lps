@@ -45,7 +45,13 @@ function lps_write_seq(varargin)
     arg.t_seg = 1120; % time/segment (us)
     arg.t_rf = 16; % time/rf pulse (us)
     arg.fa = 4; % rf flip angle (deg)
-    arg.C = [0, 0, 0; 1, 0, 0; 0, 1, 0]; % fourier basis coefficient matrix
+    arg.h_enc = 1; % fourier series basis harmonics for encoding gradient (length L/2 - 1)
+    arg.C_enc = [0, 0, 0; 1, 0, 0; 0, 1, 0]; % fourier basis coefficient matrix for encoding gradient (L x 3)
+    arg.t_ramp = []; % ramp duration (leave empty for slew-minimized time in linear ramp case)
+    arg.C_rup = []; % bspline basis coefficient matrix for ramp up gradient (L_ramp x 3, leave empty for linear ramps)
+    arg.C_rdn = []; % bspline basis coefficient matrix for ramp down gradient (L_ramp x 3, leave empty for linear ramps)
+    arg.ramp_order = 2; % bspline order for ramp gradients
+    arg.rescale = true; % option to rescale the gradients to meet the crushing condition
     arg.plotseq = false; % option to plot the sequence
     arg.pislquant = 1; % number of TRs to use for prescan
     arg.writepge = true; % option to convert seq to pge file
@@ -58,69 +64,98 @@ function lps_write_seq(varargin)
     warning('OFF', 'mr:restoreShape');
 
     % create looping star waveforms
-    [g_enc,g_rup,g_rdn,g0,rf,k_in,k_out] = lpsutl.gen_lps_waveforms( ...
+    [g_enc,g_rup,g_rdn,g0,rf_wav,~,~] = lpsutl.gen_lps_waveforms( ...
         'sys', arg.sys, ... % pulseq mr system structure
         'fov', arg.fov, ... % fov (cm)
         'dwell', arg.dwell, ... % adc dwell time (us)
         'N', arg.N_nom, ... % nominal matrix size
         'nspokes', arg.nspokes, ... % number of lps spokes
         'nechoes', arg.nechoes, ... % number of echoes
-        'C_enc', arg.C_enc, ... % fourier coefficient matrix
+        'C_enc', arg.C_enc, ... % fourier coefficient matrix for encoding gradient
+        'h_enc', arg.h_enc, ... % fourier harmonics for encoding gradient
+        't_ramp', arg.t_ramp, ... % ramp duration
+        'C_rup', arg.C_rup, ... % bspline coefficient matrix for ramp up gradient
+        'C_rdn', arg.C_rdn, ... % bspline coefficient matrix for ramp down gradient
+        'ramp_order', arg.ramp_order, ... % bspline order for ramp gradients
+        'rescale', arg.rescale, ... % option to rescale the gradients for given resolution
         't_seg', arg.t_seg, ... % time/segment
         't_rf', arg.t_rf, ... % rf pulse width
         'fa', arg.fa ... % rf flip angle (deg)
         );
-    g_wav = reshape(g_wav, [], arg.nechoes+1, 3);
+    g_enc = reshape(g_enc, [], arg.nechoes+1, 3);
 
-    % create gradient ramp waveform
-    nramp = ceil(t_ramp/arg.sys.gradRasterTime);
-    ramp_up = 1/nramp * ((0:nramp - 1).' + 0.5);
+    % create gradient ramp up waveform
+    gx_rup = mr.makeArbitraryGrad('x', 0.99*g_rup(:,1).', ...
+        'system', arg.sys, ...
+        'first', 0, ...
+        'last', 0.99*g0(1,1));
+    gy_rup = mr.makeArbitraryGrad('y', 0.99*g_rup(:,2).', ...
+        'system', arg.sys, ...
+        'first', 0, ...
+        'last', 0.99*g0(1,2));
+    gz_rup = mr.makeArbitraryGrad('z', 0.99*g_rup(:,3).', ...
+        'system', arg.sys, ...
+        'first', 0, ...
+        'last', 0.99*g0(1,3));
     
     % create gradient waveform objects for fID portion
-    g_wav_fid = [ramp_up.*g0(1,:); squeeze(g_wav(:,1,:))];
-    gx_fid = mr.makeArbitraryGrad('x', 0.99*g_wav_fid(:,1).', ...
+    g_enc_fid = squeeze(g_enc(:,1,:));
+    gx_fid = mr.makeArbitraryGrad('x', 0.99*g_enc_fid(:,1).', ...
         'system', arg.sys, ...
-        'first', 0, ...
+        'first', 0.99*g0(1,1), ...
         'last', 0.99*g0(2,1));
-    gy_fid = mr.makeArbitraryGrad('y', 0.99*g_wav_fid(:,2).', ...
+    gy_fid = mr.makeArbitraryGrad('y', 0.99*g_enc_fid(:,2).', ...
         'system', arg.sys, ...
-        'first', 0, ...
+        'first', 0.99*g0(1,2), ...
         'last', 0.99*g0(2,2));
-    gz_fid = mr.makeArbitraryGrad('z', 0.99*g_wav_fid(:,3).', ...
+    gz_fid = mr.makeArbitraryGrad('z', 0.99*g_enc_fid(:,3).', ...
         'system', arg.sys, ...
-        'first', 0, ...
+        'first', 0.99*g0(1,3), ...
         'last', 0.99*g0(2,3));
 
     % create gradient waveform objects for GRE portion
-    g_wav_gre = [reshape(g_wav(:,2:end,:),[],3); (1-ramp_up).*g0(end,:)];
-    gx_gre = mr.makeArbitraryGrad('x', 0.99*g_wav_gre(:,1).', ...
+    g_enc_gre = reshape(g_enc(:,2:end,:),[],3);
+    gx_gre = mr.makeArbitraryGrad('x', 0.99*g_enc_gre(:,1).', ...
         'system', arg.sys, ...
         'first', 0.99*g0(2,1), ...
-        'last', 0);
-    gy_gre = mr.makeArbitraryGrad('y', 0.99*g_wav_gre(:,2).', ...
+        'last', 0.99*g0(end,1));
+    gy_gre = mr.makeArbitraryGrad('y', 0.99*g_enc_gre(:,2).', ...
         'system', arg.sys, ...
         'first', 0.99*g0(2,2), ...
-        'last', 0);
-    gz_gre = mr.makeArbitraryGrad('z', 0.99*g_wav_gre(:,3).', ...
+        'last', 0.99*g0(end,2));
+    gz_gre = mr.makeArbitraryGrad('z', 0.99*g_enc_gre(:,3).', ...
         'system', arg.sys, ...
         'first', 0.99*g0(2,3), ...
+        'last', 0.99*g0(end,3));
+
+    % create gradient ramp down waveform
+    gx_rdn = mr.makeArbitraryGrad('x', 0.99*g_rdn(:,1).', ...
+        'system', arg.sys, ...
+        'first', 0.99*g0(end,1), ...
+        'last', 0);
+    gy_rdn = mr.makeArbitraryGrad('y', 0.99*g_rdn(:,2).', ...
+        'system', arg.sys, ...
+        'first', 0.99*g0(end,2), ...
+        'last', 0);
+    gz_rdn = mr.makeArbitraryGrad('z', 0.99*g_rdn(:,3).', ...
+        'system', arg.sys, ...
+        'first', 0.99*g0(end,3), ...
         'last', 0);
 
     % only include non-zero gradients in gradient object cell array
+    grads_rup = {gx_rup, gy_rup, gz_rup};
     grads_fid = {gx_fid, gy_fid, gz_fid};
     grads_gre = {gx_gre, gy_gre, gz_gre};
+    grads_rdn = {gx_rdn, gy_rdn, gz_rdn};
+    grads_rup = grads_rup(cellfun(@(g) max(abs(g.waveform)) > 0, grads_rup));
     grads_fid = grads_fid(cellfun(@(g) max(abs(g.waveform)) > 0, grads_fid));
     grads_gre = grads_gre(cellfun(@(g) max(abs(g.waveform)) > 0, grads_gre));
+    grads_rdn = grads_rdn(cellfun(@(g) max(abs(g.waveform)) > 0, grads_rdn));
 
     % create rf waveform
-    rf_delay = t_ramp - arg.t_rf*1e-6/2;
-    rf_delay = arg.sys.rfRasterTime*round(rf_delay/arg.sys.rfRasterTime);
-    if rf_delay < arg.sys.rfDeadTime
-        error('rf delay is less than deadtime')
-    end
     rf = mr.makeArbitraryRf( ...
         rf_wav, arg.nspokes*arg.fa*pi/180, ...
-        'delay', rf_delay, ...
+        'delay', arg.sys.rfDeadTime, ...
         'use', 'excitation', ...
         'system', arg.sys);
 
@@ -132,8 +167,10 @@ function lps_write_seq(varargin)
 
     % create TR delay
     delay_time = arg.tr*1e-3;
+    delay_time = delay_time - mr.calcDuration(gx_rup);
     delay_time = delay_time - mr.calcDuration(gx_fid);
     delay_time = delay_time - mr.calcDuration(gx_gre);
+    delay_time = delay_time - mr.calcDuration(gx_rdn);
     delay_time = arg.sys.blockDurationRaster*round(delay_time/arg.sys.blockDurationRaster);
     tr_delay = mr.makeDelay(delay_time);
     
@@ -153,18 +190,17 @@ function lps_write_seq(varargin)
             R = lpsutl.rot_3dtga(i+arg.dummyshots+arg.pislquant+1, 1);
         end
         
-        % R = eye(3);
-        
         % make rotation object from rotation matrix
         rot = mr.makeRotation(R);
 
         % make TRID label
         lbl = mr.makeLabel('SET','TRID', 1 + isDummyTR + 2*isReceiveGainCalibrationTR);
 
-
+        % write ramp up portion to sequence
+        seq.addBlock(grads_rup{:}, rot, lbl);
 
         % write fID portion to sequence
-        seq.addBlock(rf, grads_fid{:}, rot, lbl);
+        seq.addBlock(rf, grads_fid{:}, rot);
 
         % write GRE portion to sequence
         if isDummyTR
@@ -172,6 +208,9 @@ function lps_write_seq(varargin)
         else
             seq.addBlock(adc, grads_gre{:}, rot);
         end
+
+        % write ramp down portion to sequence
+        seq.addBlock(grads_rdn{:}, rot);
 
         % add tr delay
         seq.addBlock(tr_delay);

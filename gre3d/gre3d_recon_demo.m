@@ -1,8 +1,8 @@
 %% GRE3D recon + sensitivity map estimation demo script
 % by David Frey
 %% set parameters
-rec_args.fname = './raw_data_sub1.h5'; % input raw data .h5 file name (see gre3d_convert_data.m)
-rec_args.fname_smaps = '../smaps_sub1.h5'; % smaps input file name
+rec_args.fname = './raw_data.h5'; % input raw data .h5 file name (see gre3d_convert_data.m)
+rec_args.fname_smaps = '../smaps.h5'; % smaps input file name
 rec_args.estimate_smap = true; % option to estimate sensitivity maps from ACS data
 rec_args.Q = 8; % number of coils to compress to for recon
 rec_args.niter = 30; % number of iterations for CG

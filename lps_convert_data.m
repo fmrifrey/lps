@@ -64,15 +64,18 @@ function [kdata,k_in,k_out,seq_args] = lps_convert_data(fname, ofile)
     end
 
     % generate kspace trajectory
-    [~,~,~,~,k_in0,k_out0] = lpsutl.gen_lps_waveforms( ...
-        'sys', seq_args.sys, ... % pulseq mr system object
+    [~,~,~,~,~,k_in0,k_out0] = lpsutl.gen_lps_waveforms( ...
+        'sys', seq_args.sys, ... % pulseq mr system structure
         'fov', seq_args.fov, ... % fov (cm)
+        'dwell', seq_args.dwell, ... % adc dwell time (us)
         'N', seq_args.N_nom, ... % nominal matrix size
         'nspokes', seq_args.nspokes, ... % number of lps spokes
         'nechoes', seq_args.nechoes, ... % number of echoes
-        't_seg', seq_args.t_seg, ... % number of samples/segment
-        't_rf', seq_args.t_rf, ... % number of samples/rf pulse
-        'C', seq_args.C, ... % option to use satellite trajectories
+        'C_enc', seq_args.C_enc, ... % fourier coefficient matrix for encoding gradient
+        'h_enc', seq_args.h_enc, ... % fourier harmonics for encoding gradient
+        'rescale', seq_args.rescale, ... % option to rescale the gradients for given resolution
+        't_seg', seq_args.t_seg, ... % time/segment
+        't_rf', seq_args.t_rf, ... % rf pulse width
         'fa', seq_args.fa ... % rf flip angle (deg)
         );
     

@@ -1,16 +1,16 @@
 %% Looping Star demo recon script
 % by David Frey
 %% set parameters
-rec_args.fname = './raw_data_sub2.h5'; % input raw data .h5 file name (see lps_convert_data.m)
-rec_args.fname_smaps = '../smaps_sub2.h5'; % smaps input file name
+rec_args.fname = './raw_data.h5'; % input raw data .h5 file name (see lps_convert_data.m)
+rec_args.fname_smaps = '';%'../smaps.h5'; % smaps input file name
 rec_args.Q = 6; % number of compressed coils to use
-rec_args.N = 90; % recon image size
-rec_args.fov = 22; % recon fov
+rec_args.N = 64; % recon image size
+rec_args.fov = 16; % recon fov
 rec_args.echoes2use = []; % indices of echoes to include (empty = all)
 rec_args.ints2use = []; % indices of interleaves to include (empty = all)
-rec_args.prjs2use = 1:32; % indices of projections to include (empty = all)
+rec_args.prjs2use = 1:100; % indices of projections to include (empty = all)
 rec_args.reps2use = []; % indices of repetitions to include (empty = all)
-rec_args.P = 32; % number of projections to use per frame (empty = nint*nprj)
+rec_args.P = 100; % number of projections to use per frame (empty = nint*nprj)
 rec_args.niter = 30; % number of CG iterations
 rec_args.dcf_init = true; % option to initialize solution with density compensated NUFFT
 rec_args.use_parfor = true; % option to use parfor loop in frame/coil-wise NUFFTs
@@ -55,6 +55,9 @@ end
 Ptotal = length(rec_args.ints2use)*length(rec_args.prjs2use)*length(rec_args.reps2use);
 if isempty(rec_args.P)
     rec_args.P = length(rec_args.prjs2use)*length(rec_args.reps2use);
+end
+if isempty(rec_args.fov)
+    rec_args.fov = seq_args.fov;
 end
 
 % select out desired indices
