@@ -2,15 +2,15 @@
 % by David Frey
 %% set parameters
 rec_args.fname = './raw_data.h5'; % input raw data .h5 file name (see lps_convert_data.m)
-rec_args.fname_smaps = '';%'../smaps.h5'; % smaps input file name
+rec_args.fname_smaps = '../smaps.h5'; % smaps input file name
 rec_args.Q = 6; % number of compressed coils to use
-rec_args.N = 64; % recon image size
-rec_args.fov = 16; % recon fov
+rec_args.N = 58; % recon image size
+rec_args.fov = 15.95; % recon fov
 rec_args.echoes2use = []; % indices of echoes to include (empty = all)
 rec_args.ints2use = []; % indices of interleaves to include (empty = all)
-rec_args.prjs2use = 1:100; % indices of projections to include (empty = all)
+% rec_args.prjs2use = 1:100; % indices of projections to include (empty = all)
 rec_args.reps2use = []; % indices of repetitions to include (empty = all)
-rec_args.P = 100; % number of projections to use per frame (empty = nint*nprj)
+rec_args.P = []; % number of projections to use per frame (empty = nint*nprj)
 rec_args.niter = 30; % number of CG iterations
 rec_args.dcf_init = true; % option to initialize solution with density compensated NUFFT
 rec_args.use_parfor = true; % option to use parfor loop in frame/coil-wise NUFFTs
@@ -31,6 +31,7 @@ ktraj_out = lpsutl.loadh5struct(rec_args.fname,'/ktraj').spoke_out; % spoke-out 
 if isfile(rec_args.fname_smaps)
     smaps = lpsutl.loadh5struct(rec_args.fname_smaps).real + ...
         1i*lpsutl.loadh5struct(rec_args.fname_smaps).imag; % sensitivity maps
+    smaps_fov = lpsutl.loadh5struct(rec_args.fname_smaps).fov;
 else
     smaps = []; % leave empty if no sensitity map file provided
 end
@@ -93,7 +94,7 @@ else
     smaps = reshape(reshape(smaps, [], size(smaps,4)) * Vt, [size(smaps,1:3), rec_args.Q]);
 
     % resample sensitivity maps to recon size
-    smaps = lpsutl.resample3d(smaps,rec_args.N*ones(1,3));
+    smaps = lpsutl.resample3d(smaps,rec_args.N*ones(1,3),rec_args.fov/smaps_fov*ones(1,3));
 end
 
 %% create the forward model and initialize the solution

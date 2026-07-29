@@ -1,10 +1,11 @@
-function data_new = resample3d(data,sz_new)
+function data_new = resample3d(data,sz_new,fov_new)
 % resamples the ND data along the first 3 dimensions
 % by David Frey
 %
 % inputs:
 % data - ND data matrix (at least 3D)
 % sz_new - new 3D size
+% fov_new - new fov (as fraction of old)
 %
 % outputs:
 % data_new - resampled data
@@ -17,9 +18,9 @@ sz = size(data);
 [X, Y, Z] = ndgrid(linspace(-1, 1, sz(1)), ...
     linspace(-1, 1, sz(2)), ...
     linspace(-1, 1, sz(3)));
-[Xq, Yq, Zq] = ndgrid(linspace(-1, 1, sz_new(1)), ...
-    linspace(-1, 1, sz_new(2)), ...
-    linspace(-1, 1, sz_new(3)));
+[Xq, Yq, Zq] = ndgrid(linspace(-fov_new(1), fov_new(1), sz_new(1)), ...
+    linspace(-fov_new(2), fov_new(2), sz_new(2)), ...
+    linspace(-fov_new(3), fov_new(3), sz_new(3)));
 
 % interpolate the data
 if length(sz) > 3

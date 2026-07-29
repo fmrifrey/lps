@@ -40,6 +40,7 @@ if isempty(smaps) && rec_args.estimate_smap
     % save the sensitivity maps
     lpsutl.saveh5struct(rec_args.fname_smaps,real(smaps),'/real');
     lpsutl.saveh5struct(rec_args.fname_smaps,imag(smaps),'/imag');
+    lpsutl.saveh5struct(rec_args.fname_smaps,seq_args.fov,'/fov');
 
 end
 
