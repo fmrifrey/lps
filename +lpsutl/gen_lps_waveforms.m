@@ -192,6 +192,15 @@ end
 
 function B = bspline_basis(t, t_knots, k)
 
+    % generate the b-spline basis functions
+    t = t(:);
+    t_knots = t_knots(:)';
+
+    t_padded = [repmat(t_knots(1), 1, k), t_knots, repmat(t_knots(end), 1, k)];
+    N        = length(t);
+    n_basis  = length(t_padded) - k - 1;
+    B        = zeros(N, n_basis);
+
     % define recursive b-spline function
     function result = b_recursive(i, k, t, t_padded)
     
@@ -201,7 +210,11 @@ function B = bspline_basis(t, t_knots, k)
         t_ipkp1 = t_padded(i + k + 1);
     
         if k == 0
-            result = double((t >= t_i) & (t < t_ip1));
+            if i == n_basis  % last basis function — close right end
+                result = double((t >= t_i) & (t <= t_ip1));
+            else
+                result = double((t >= t_i) & (t < t_ip1));
+            end
             return;
         end
     
@@ -220,15 +233,6 @@ function B = bspline_basis(t, t_knots, k)
     
         result = term1 + term2;
     end
-
-    % generate the b-spline basis functions
-    t = t(:);
-    t_knots = t_knots(:)';
-
-    t_padded = [repmat(t_knots(1), 1, k), t_knots, repmat(t_knots(end), 1, k)];
-    n_basis  = length(t_padded) - k - 1;
-    N        = length(t);
-    B        = zeros(N, n_basis);
 
     for i = 1:n_basis
         B(:, i) = b_recursive(i, k, t, t_padded);
